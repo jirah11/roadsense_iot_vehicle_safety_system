@@ -10,6 +10,8 @@ class HomeScreen extends StatelessWidget {
   final String vehicleNickname;
   final List<AlertModel> activeAlerts;
   final bool iotConnected;
+  final TemperatureUnit tempUnit;
+  final DistanceUnit distanceUnit;
   final ValueChanged<AppScreen> onNavigate;
 
   const HomeScreen({
@@ -19,36 +21,46 @@ class HomeScreen extends StatelessWidget {
     required this.vehicleNickname,
     required this.activeAlerts,
     required this.iotConnected,
+    required this.tempUnit,
+    required this.distanceUnit,
     required this.onNavigate,
   });
 
+  // Returns 'SAFE', 'CAUTION', or 'DANGER' for flood level
   String _floodStatus() {
     if (sensorData.floodLevel >= thresholds.floodDanger) return 'DANGER';
     if (sensorData.floodLevel >= thresholds.floodCaution) return 'CAUTION';
     return 'SAFE';
   }
 
+  // Returns 'SAFE', 'CAUTION', or 'DANGER' for temperature
   String _tempStatus() {
     if (sensorData.temperature >= thresholds.tempDanger) return 'DANGER';
     if (sensorData.temperature >= thresholds.tempCaution) return 'CAUTION';
     return 'SAFE';
   }
 
+  // Maps a status string to its display color
   Color _statusColor(String status) {
     if (status == 'DANGER') return AppColors.rose;
     if (status == 'CAUTION') return AppColors.caution;
     return AppColors.emerald;
   }
 
+  // Progress bar fill (0.0 - 1.0) for flood and temperature
   double _floodPercent() => (sensorData.floodLevel / 60).clamp(0.0, 1.0);
-  double _tempPercent() => ((sensorData.temperature - 20) / 40).clamp(0.0, 1.0);
+  double _tempPercent() =>
+      ((sensorData.temperature - 20) / 40).clamp(0.0, 1.0);
 
-  // FIX 1: was missing () when called — now it's a proper method call
+  // Formats the sensor timestamp as hh:mm:ss AM/PM
+  // Note: called with () in the build method — _lastUpdated()
   String _lastUpdated() {
     final t = sensorData.timestamp;
     final hour = t.hour > 12 ? t.hour - 12 : (t.hour == 0 ? 12 : t.hour);
     final ampm = t.hour >= 12 ? 'PM' : 'AM';
-    return '${hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:${t.second.toString().padLeft(2, '0')} $ampm';
+    return '${hour.toString().padLeft(2, '0')}:'
+        '${t.minute.toString().padLeft(2, '0')}:'
+        '${t.second.toString().padLeft(2, '0')} $ampm';
   }
 
   @override
@@ -56,12 +68,40 @@ class HomeScreen extends StatelessWidget {
     final floodStatus = _floodStatus();
     final tempStatus = _tempStatus();
 
+    // Convert units for display (internal data is always cm / °C)
+    final bool useInches = distanceUnit == DistanceUnit.inches;
+    final bool useFahrenheit = tempUnit == TemperatureUnit.fahrenheit;
+
+    final double displayFlood =
+    useInches ? sensorData.floodLevel / 2.54 : sensorData.floodLevel;
+    final String floodUnit = useInches ? 'in' : 'cm';
+
+    final double displayTemp = useFahrenheit
+        ? sensorData.temperature * 9 / 5 + 32
+        : sensorData.temperature;
+    final String tempUnitLabel = useFahrenheit ? '°F' : '°C';
+
+    // Threshold labels shown below the progress bar
+    final String floodCautionLabel = useInches
+        ? 'Caution: ${(thresholds.floodCaution / 2.54).toStringAsFixed(1)}in'
+        : 'Caution: ${thresholds.floodCaution}cm';
+    final String floodDangerLabel = useInches
+        ? 'Danger: ${(thresholds.floodDanger / 2.54).toStringAsFixed(1)}in'
+        : 'Danger: ${thresholds.floodDanger}cm';
+
+    final String tempCautionLabel = useFahrenheit
+        ? 'Caution: ${(thresholds.tempCaution * 9 / 5 + 32).toStringAsFixed(1)}°F'
+        : 'Caution: ${thresholds.tempCaution}°C';
+    final String tempDangerLabel = useFahrenheit
+        ? 'Danger: ${(thresholds.tempDanger * 9 / 5 + 32).toStringAsFixed(1)}°F'
+        : 'Danger: ${thresholds.tempDanger}°C';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
+          // --- Header ---
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -84,6 +124,7 @@ class HomeScreen extends StatelessWidget {
               ),
               Row(
                 children: [
+                  // Green/red dot indicating IoT connection status
                   Container(
                     width: 8,
                     height: 8,
@@ -92,7 +133,9 @@ class HomeScreen extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: (iotConnected ? AppColors.emerald : AppColors.rose)
+                          color: (iotConnected
+                              ? AppColors.emerald
+                              : AppColors.rose)
                               .withValues(alpha: 0.6),
                           blurRadius: 6,
                         ),
@@ -102,7 +145,8 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     iotConnected ? 'Connected' : 'Offline',
-                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.accent),
+                    style:
+                    GoogleFonts.inter(fontSize: 12, color: AppColors.accent),
                   ),
                 ],
               ),
@@ -110,7 +154,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Active alerts banner
+          // --- Active alerts banner (only shown when there are active alerts) ---
           if (activeAlerts.isNotEmpty)
             GestureDetector(
               onTap: () => onNavigate(AppScreen.alerts),
@@ -127,9 +171,13 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.rose.withValues(alpha: 0.3)),
+                  border:
+                  Border.all(color: AppColors.rose.withValues(alpha: 0.3)),
                   boxShadow: const [
-                    BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
+                    BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 12,
+                        offset: Offset(0, 4)),
                   ],
                 ),
                 child: Row(
@@ -141,7 +189,11 @@ class HomeScreen extends StatelessWidget {
                         color: AppColors.rose,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 22),
+                      child: const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -157,7 +209,8 @@ class HomeScreen extends StatelessWidget {
                           ),
                           Text(
                             'Tap to view details',
-                            style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
+                            style: GoogleFonts.inter(
+                                fontSize: 12, color: Colors.white70),
                           ),
                         ],
                       ),
@@ -176,19 +229,19 @@ class HomeScreen extends StatelessWidget {
             ),
           if (activeAlerts.isNotEmpty) const SizedBox(height: 24),
 
-          // Sensor cards
+          // --- Sensor cards (Flood + Temperature side by side) ---
           Row(
             children: [
               Expanded(
                 child: _SensorCard(
                   title: 'Flood Level',
-                  value: sensorData.floodLevel.toStringAsFixed(1),
-                  unit: 'cm',
+                  value: displayFlood.toStringAsFixed(1),
+                  unit: floodUnit,
                   status: floodStatus,
                   statusColor: _statusColor(floodStatus),
                   progress: _floodPercent(),
-                  cautionLabel: 'Caution: ${thresholds.floodCaution}cm',
-                  dangerLabel: 'Danger: ${thresholds.floodDanger}cm',
+                  cautionLabel: floodCautionLabel,
+                  dangerLabel: floodDangerLabel,
                   icon: Icons.water_drop,
                 ),
               ),
@@ -196,13 +249,13 @@ class HomeScreen extends StatelessWidget {
               Expanded(
                 child: _SensorCard(
                   title: 'Temperature',
-                  value: sensorData.temperature.toStringAsFixed(1),
-                  unit: '°C',
+                  value: displayTemp.toStringAsFixed(1),
+                  unit: tempUnitLabel,
                   status: tempStatus,
                   statusColor: _statusColor(tempStatus),
                   progress: _tempPercent(),
-                  cautionLabel: 'Caution: ${thresholds.tempCaution}°C',
-                  dangerLabel: 'Danger: ${thresholds.tempDanger}°C',
+                  cautionLabel: tempCautionLabel,
+                  dangerLabel: tempDangerLabel,
                   icon: Icons.thermostat,
                 ),
               ),
@@ -210,7 +263,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // FIX 2: now calls _lastUpdated() with parentheses
+          // FIX: was '$_lastUpdated' (printed the closure), now correctly calls _lastUpdated()
           Center(
             child: Text(
               'Last updated: ${_lastUpdated()}',
@@ -219,7 +272,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Nav cards
+          // --- Navigation shortcut cards ---
           Row(
             children: [
               Expanded(
@@ -266,7 +319,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Help button
+          // --- Help button ---
           GestureDetector(
             onTap: () => onNavigate(AppScreen.help),
             child: Container(
@@ -298,6 +351,10 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// _SensorCard — displays flood level or temperature with a progress bar
+// ---------------------------------------------------------------------------
+
 class _SensorCard extends StatelessWidget {
   final String title;
   final String value;
@@ -323,7 +380,8 @@ class _SensorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX 3: Removed AspectRatio(1:1) and added mainAxisSize.min to prevent overflow
+    // FIX: removed AspectRatio(aspectRatio: 1) which caused overflow.
+    // mainAxisSize.min lets the Column shrink to fit its content.
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -334,13 +392,15 @@ class _SensorCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
+          BoxShadow(
+              color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.min, // shrink-wraps to content
         children: [
+          // Icon + status badge row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -354,7 +414,8 @@ class _SensorCard extends StatelessWidget {
                 child: Icon(icon, color: Colors.white, size: 20),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor,
                   borderRadius: BorderRadius.circular(20),
@@ -371,6 +432,8 @@ class _SensorCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+
+          // Label
           Text(
             title,
             style: GoogleFonts.inter(
@@ -380,6 +443,8 @@ class _SensorCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+
+          // Big value display
           Center(
             child: RichText(
               text: TextSpan(
@@ -399,6 +464,8 @@ class _SensorCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+
+          // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
@@ -409,20 +476,22 @@ class _SensorCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
+
+          // Caution / Danger threshold labels
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
                 child: Text(
                   cautionLabel,
-                  style: GoogleFonts.inter(fontSize: 9, color: Colors.white38, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.inter(fontSize: 9, color: Colors.white38),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Flexible(
                 child: Text(
                   dangerLabel,
-                  style: GoogleFonts.inter(fontSize: 9, color: Colors.white38, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.inter(fontSize: 9, color: Colors.white38),
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.end,
                 ),
@@ -464,12 +533,14 @@ class _NavCard extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(20),
           boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
+            BoxShadow(
+                color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
           ],
         ),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
+            // Red badge dot shown when there are unread alerts
             if (badge > 0)
               Positioned(
                 top: -4,

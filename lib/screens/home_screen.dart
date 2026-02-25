@@ -26,14 +26,14 @@ class HomeScreen extends StatelessWidget {
     required this.onNavigate,
   });
 
-  // Returns 'SAFE', 'CAUTION', or 'DANGER' for flood level
+  // 'SAFE', 'CAUTION', 'DANGER' para sa flood level
   String _floodStatus() {
     if (sensorData.floodLevel >= thresholds.floodDanger) return 'DANGER';
     if (sensorData.floodLevel >= thresholds.floodCaution) return 'CAUTION';
     return 'SAFE';
   }
 
-  // Returns 'SAFE', 'CAUTION', or 'DANGER' for temperature
+  //'SAFE', 'CAUTION', 'DANGER' para sa temperature
   String _tempStatus() {
     if (sensorData.temperature >= thresholds.tempDanger) return 'DANGER';
     if (sensorData.temperature >= thresholds.tempCaution) return 'CAUTION';
@@ -504,6 +504,10 @@ class _SensorCard extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// _NavCard — tappable shortcut card for navigating to other screens
+// ---------------------------------------------------------------------------
+
 class _NavCard extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -593,4 +597,3 @@ class _NavCard extends StatelessWidget {
     );
   }
 }
-

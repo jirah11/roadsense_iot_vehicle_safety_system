@@ -4,6 +4,7 @@ import 'app_theme.dart';
 import 'models/models.dart';
 import 'screens/home_screen.dart';
 import 'widgets/bottom_nav.dart';
+import 'screens/alerts_screen.dart';
 
 enum AppScreen {
   home,
@@ -233,11 +234,7 @@ class _AppShellState extends State<AppShell> {
                       onNavigate: _goTo,
                     ),
 
-                  if (_currentScreen == AppScreen.alerts)
-                    _PlaceholderScreen(
-                      label: 'Alerts',
-                      onBack: () => _goTo(AppScreen.home),
-                    ),
+
                   if (_currentScreen == AppScreen.vehicle)
                     _PlaceholderScreen(
                       label: 'Vehicle',

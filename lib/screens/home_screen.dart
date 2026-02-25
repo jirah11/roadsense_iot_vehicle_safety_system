@@ -270,7 +270,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // --- Navigation shortcut cards ---
+          //  Navigation shortcut cards dun sa homescreen
           Row(
             children: [
               Expanded(

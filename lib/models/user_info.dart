@@ -1,3 +1,5 @@
+// purpose neto, pang-cacall ko siya sa mga screens gets? gets
+// warning feb 26, wala pang account signin login keme, dito lang muna to
 class UserInfo {
   final String firstName;
   final String middleName;

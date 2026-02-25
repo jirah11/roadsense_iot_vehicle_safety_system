@@ -7,7 +7,7 @@ enum AlertSeverity{
   caution,
   danger
 }
-
+ // purpose neto, pang-cacall ko siya sa mga screens gets? gets
 class AlertModel {
   final String id;
   final AlertType type;

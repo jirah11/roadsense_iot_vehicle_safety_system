@@ -4,7 +4,7 @@ import '../app.dart';
 import '../app_theme.dart';
 import '../models/models.dart';
 
-
+//mga pang-call YEHEY I AM GOING INSANE
 class AlertsScreen extends StatelessWidget {
   final List<AlertModel> alerts;
   final VoidCallback onBack;
@@ -24,7 +24,7 @@ class AlertsScreen extends StatelessWidget {
     required this.distanceUnit,
   });
 
-
+//mga getter
   List<AlertModel> get activeAlerts => alerts.where((a) => !a.acknowledged).toList();
   List<AlertModel> get acknowledgedAlerts => alerts.where((a) => a.acknowledged).toList();
 
@@ -38,7 +38,7 @@ class AlertsScreen extends StatelessWidget {
     return '${date.month}/${date.day}/${date.year}';
   }
 
-//container ng alert cards
+//container ng alert cards, mga status banners din caution and danger + the active alert ewan ko teh andiyan naman na siya
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(

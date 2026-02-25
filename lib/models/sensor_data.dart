@@ -1,3 +1,4 @@
+// purpose neto, pang-cacall ko siya sa mga screens gets? gets
 class SensorData {
   final double floodLevel;
   final double temperature;

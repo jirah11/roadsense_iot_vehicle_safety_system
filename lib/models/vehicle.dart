@@ -1,3 +1,5 @@
+// purpose neto, pang-cacall ko siya sa mga screens gets? gets
+// warning feb 26, wala pang vehicle keme, dito lang muna to
 enum VehicleType {
   sedan,
   suv,

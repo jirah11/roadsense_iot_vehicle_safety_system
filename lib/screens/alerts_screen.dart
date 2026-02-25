@@ -38,7 +38,7 @@ class AlertsScreen extends StatelessWidget {
     return '${date.month}/${date.day}/${date.year}';
   }
 
-
+//container ng alert cards
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -203,7 +203,7 @@ class _AlertCard extends StatelessWidget {
     required this.distanceUnit,
   });
 
-
+// loob ng alert cards
   @override
   Widget build(BuildContext context) {
     final isDanger = alert.severity == AlertSeverity.danger;

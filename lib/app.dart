@@ -57,7 +57,7 @@ class _AppShellState extends State<AppShell> {
     _startSensorSimulation();
   }
 
-
+  // placeholder alerts muna ok? recent history siya
   List<AlertModel> _initialAlerts() {
     final now = DateTime.now();
     return [
@@ -119,7 +119,7 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-  // --- Auto-generate alerts when thresholds are crossed ---
+  // auto-generated yung alerts pag nakalampas sa threshold safety keme
 
   void _checkAlerts() {
     final thresholds = VehicleThresholds.forType(_vehicleType);
@@ -186,17 +186,31 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
-  // --- Convenience getters ---
+  //  Convenience getters
 
   VehicleThresholds get _thresholds => VehicleThresholds.forType(_vehicleType);
   List<AlertModel> get _activeAlerts =>
       _alerts.where((a) => !a.acknowledged).toList();
 
-  // --- Navigation ---
+
+  void _acknowledgeAlert(String id) {
+    setState(() {
+      _alerts =
+          _alerts.map((a) => a.id == id ? a.copyWith(acknowledged: true) : a).toList();
+    });
+  }
+
+  void _clearAllAlerts() {
+    setState(() {
+      _alerts = _alerts.map((a) => a.copyWith(acknowledged: true)).toList();
+    });
+  }
+
+  // navigation nung mga cards sa home screen
 
   void _goTo(AppScreen screen) => setState(() => _currentScreen = screen);
 
-  // --- Build ---
+  // build
 
   @override
   Widget build(BuildContext context) {
@@ -234,6 +248,15 @@ class _AppShellState extends State<AppShell> {
                       onNavigate: _goTo,
                     ),
 
+                  if (_currentScreen == AppScreen.alerts)
+                    AlertsScreen(
+                      alerts: _alerts,
+                      tempUnit: _tempUnit,
+                      distanceUnit: _distanceUnit,
+                      onBack: () => _goTo(AppScreen.home),
+                      onAcknowledge: _acknowledgeAlert,
+                      onClearAll: _clearAllAlerts,
+                    ),
 
                   if (_currentScreen == AppScreen.vehicle)
                     _PlaceholderScreen(
@@ -281,7 +304,7 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
-
+//pag hinde pa gawa ang screen, ayan muna ang lalabas
 class _PlaceholderScreen extends StatelessWidget {
   final String label;
   final VoidCallback onBack;

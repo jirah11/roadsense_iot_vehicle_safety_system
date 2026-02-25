@@ -40,20 +40,19 @@ class HomeScreen extends StatelessWidget {
     return 'SAFE';
   }
 
-  // Maps a status string to its display color
+  // display color sa caution tas danger
   Color _statusColor(String status) {
     if (status == 'DANGER') return AppColors.rose;
     if (status == 'CAUTION') return AppColors.caution;
     return AppColors.emerald;
   }
 
-  // Progress bar fill (0.0 - 1.0) for flood and temperature
+  // progress bar fill (0.0 - 1.0) sa flood tas temperature
   double _floodPercent() => (sensorData.floodLevel / 60).clamp(0.0, 1.0);
   double _tempPercent() =>
       ((sensorData.temperature - 20) / 40).clamp(0.0, 1.0);
 
-  // Formats the sensor timestamp as hh:mm:ss AM/PM
-  // Note: called with () in the build method — _lastUpdated()
+  // format sa sensor timestamp from hh:mm:ss AM/PM
   String _lastUpdated() {
     final t = sensorData.timestamp;
     final hour = t.hour > 12 ? t.hour - 12 : (t.hour == 0 ? 12 : t.hour);
@@ -68,7 +67,7 @@ class HomeScreen extends StatelessWidget {
     final floodStatus = _floodStatus();
     final tempStatus = _tempStatus();
 
-    // Convert units for display (internal data is always cm / °C)
+    // Convert units for display
     final bool useInches = distanceUnit == DistanceUnit.inches;
     final bool useFahrenheit = tempUnit == TemperatureUnit.fahrenheit;
 
@@ -81,7 +80,7 @@ class HomeScreen extends StatelessWidget {
         : sensorData.temperature;
     final String tempUnitLabel = useFahrenheit ? '°F' : '°C';
 
-    // Threshold labels shown below the progress bar
+    // threshold labels
     final String floodCautionLabel = useInches
         ? 'Caution: ${(thresholds.floodCaution / 2.54).toStringAsFixed(1)}in'
         : 'Caution: ${thresholds.floodCaution}cm';
@@ -101,7 +100,7 @@ class HomeScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- Header ---
+          // header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -124,7 +123,7 @@ class HomeScreen extends StatelessWidget {
               ),
               Row(
                 children: [
-                  // Green/red dot indicating IoT connection status
+                  // Green or red dot sa IoT connection status wow
                   Container(
                     width: 8,
                     height: 8,
@@ -154,7 +153,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // --- Active alerts banner (only shown when there are active alerts) ---
+          //Active alerts banner
           if (activeAlerts.isNotEmpty)
             GestureDetector(
               onTap: () => onNavigate(AppScreen.alerts),
@@ -229,7 +228,7 @@ class HomeScreen extends StatelessWidget {
             ),
           if (activeAlerts.isNotEmpty) const SizedBox(height: 24),
 
-          // --- Sensor cards (Flood + Temperature side by side) ---
+          //  Sensor cards
           Row(
             children: [
               Expanded(
@@ -263,7 +262,6 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // FIX: was '$_lastUpdated' (printed the closure), now correctly calls _lastUpdated()
           Center(
             child: Text(
               'Last updated: ${_lastUpdated()}',
@@ -319,7 +317,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // --- Help button ---
+          // Help button
           GestureDetector(
             onTap: () => onNavigate(AppScreen.help),
             child: Container(
@@ -351,9 +349,9 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// _SensorCard — displays flood level or temperature with a progress bar
-// ---------------------------------------------------------------------------
+
+// _SensorCard
+
 
 class _SensorCard extends StatelessWidget {
   final String title;
@@ -380,8 +378,6 @@ class _SensorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // FIX: removed AspectRatio(aspectRatio: 1) which caused overflow.
-    // mainAxisSize.min lets the Column shrink to fit its content.
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -398,7 +394,7 @@ class _SensorCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min, // shrink-wraps to content
+        mainAxisSize: MainAxisSize.min, // shrink-wraps to content, shrinks?!?!?!
         children: [
           // Icon + status badge row
           Row(
@@ -504,9 +500,7 @@ class _SensorCard extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// _NavCard — tappable shortcut card for navigating to other screens
-// ---------------------------------------------------------------------------
+// _NavCard sa homescreen
 
 class _NavCard extends StatelessWidget {
   final String title;
@@ -544,7 +538,7 @@ class _NavCard extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // Red badge dot shown when there are unread alerts
+            // Red badge dot pag may unread alerts
             if (badge > 0)
               Positioned(
                 top: -4,

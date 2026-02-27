@@ -29,6 +29,7 @@ class AlertsScreen extends StatelessWidget {
   List<AlertModel> get acknowledgedAlerts =>
       alerts.where((a) => a.acknowledged).toList();
 
+  //comment
   String _formatTime(DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);

@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../app_theme.dart';
 
-
 class BottomNav extends StatelessWidget {
   final AppScreen currentScreen;
   final int alertCount;
   final ValueChanged<AppScreen> onNavigate;
-
 
   const BottomNav({
     super.key,
@@ -15,7 +13,6 @@ class BottomNav extends StatelessWidget {
     required this.alertCount,
     required this.onNavigate,
   });
-
 
   void _openMoreMenu(BuildContext context) {
     showModalBottomSheet<void>(
@@ -42,7 +39,13 @@ class BottomNav extends StatelessWidget {
               const Divider(color: Colors.white24, height: 24),
               ListTile(
                 leading: const Icon(Icons.close, color: Colors.white70),
-                title: const Text('Close', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w500)),
+                title: const Text(
+                  'Close',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 onTap: () => Navigator.pop(context),
               ),
             ],
@@ -52,19 +55,32 @@ class BottomNav extends StatelessWidget {
     ).then((_) {});
   }
 
-
-  Widget _navItem(BuildContext context, IconData icon, String label, AppScreen screen) {
+  Widget _navItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    AppScreen screen,
+  ) {
     final isActive = currentScreen == screen;
     return ListTile(
-      leading: Icon(icon, color: isActive ? AppColors.white : Colors.white70, size: 24),
-      title: Text(label, style: TextStyle(color: isActive ? AppColors.white : Colors.white70, fontWeight: FontWeight.w500)),
+      leading: Icon(
+        icon,
+        color: isActive ? AppColors.white : Colors.white70,
+        size: 24,
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: isActive ? AppColors.white : Colors.white70,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
       onTap: () {
         Navigator.pop(context);
         onNavigate(screen);
       },
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -75,22 +91,33 @@ class BottomNav extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [AppColors.backgroundStart, AppColors.backgroundMid],
         ),
-        border: Border(top: BorderSide(color: AppColors.white.withValues(alpha: 0.1))),
+        border: Border(
+          top: BorderSide(color: AppColors.white.withValues(alpha: 0.1)),
+        ),
       ),
-      padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: MediaQuery.paddingOf(context).bottom + 8),
+      padding: EdgeInsets.only(
+        left: 8,
+        right: 8,
+        top: 8,
+        bottom: MediaQuery.paddingOf(context).bottom + 8,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _tab(Icons.home, 'Home', AppScreen.home),
           _tab(Icons.directions_car, 'Vehicle', AppScreen.vehicle),
-          _tabWithBadge(Icons.notifications, 'Alerts', AppScreen.alerts, alertCount),
+          _tabWithBadge(
+            Icons.notifications,
+            'Alerts',
+            AppScreen.alerts,
+            alertCount,
+          ),
           _tab(Icons.history, 'History', AppScreen.history),
           _moreTab(context),
         ],
       ),
     );
   }
-
 
   Widget _tab(IconData icon, String label, AppScreen screen) {
     final isActive = currentScreen == screen;
@@ -106,7 +133,11 @@ class BottomNav extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 24, color: isActive ? AppColors.white : Colors.white60),
+            Icon(
+              icon,
+              size: 24,
+              color: isActive ? AppColors.white : Colors.white60,
+            ),
             const SizedBox(height: 4),
             Text(
               label,
@@ -122,8 +153,12 @@ class BottomNav extends StatelessWidget {
     );
   }
 
-
-  Widget _tabWithBadge(IconData icon, String label, AppScreen screen, int count) {
+  Widget _tabWithBadge(
+    IconData icon,
+    String label,
+    AppScreen screen,
+    int count,
+  ) {
     final isActive = currentScreen == screen;
     return GestureDetector(
       onTap: () => onNavigate(screen),
@@ -140,7 +175,11 @@ class BottomNav extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 24, color: isActive ? AppColors.white : Colors.white60),
+                Icon(
+                  icon,
+                  size: 24,
+                  color: isActive ? AppColors.white : Colors.white60,
+                ),
                 const SizedBox(height: 4),
                 Text(
                   label,
@@ -167,7 +206,11 @@ class BottomNav extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Text(
                   count > 9 ? '9+' : '$count',
-                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -175,7 +218,6 @@ class BottomNav extends StatelessWidget {
       ),
     );
   }
-
 
   Widget _moreTab(BuildContext context) {
     return GestureDetector(
@@ -187,11 +229,14 @@ class BottomNav extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'More',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white60),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.white60,
+            ),
           ),
         ],
       ),
     );
   }
 }
-

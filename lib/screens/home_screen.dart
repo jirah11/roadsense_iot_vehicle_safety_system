@@ -49,8 +49,7 @@ class HomeScreen extends StatelessWidget {
 
   // progress bar fill (0.0 - 1.0) sa flood tas temperature
   double _floodPercent() => (sensorData.floodLevel / 60).clamp(0.0, 1.0);
-  double _tempPercent() =>
-      ((sensorData.temperature - 20) / 40).clamp(0.0, 1.0);
+  double _tempPercent() => ((sensorData.temperature - 20) / 40).clamp(0.0, 1.0);
 
   // format sa sensor timestamp from hh:mm:ss AM/PM
   String _lastUpdated() {
@@ -71,8 +70,9 @@ class HomeScreen extends StatelessWidget {
     final bool useInches = distanceUnit == DistanceUnit.inches;
     final bool useFahrenheit = tempUnit == TemperatureUnit.fahrenheit;
 
-    final double displayFlood =
-    useInches ? sensorData.floodLevel / 2.54 : sensorData.floodLevel;
+    final double displayFlood = useInches
+        ? sensorData.floodLevel / 2.54
+        : sensorData.floodLevel;
     final String floodUnit = useInches ? 'in' : 'cm';
 
     final double displayTemp = useFahrenheit
@@ -117,7 +117,10 @@ class HomeScreen extends StatelessWidget {
                   ),
                   Text(
                     'Vehicle Safety Monitor',
-                    style: GoogleFonts.inter(fontSize: 14, color: AppColors.accent),
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: AppColors.accent,
+                    ),
                   ),
                 ],
               ),
@@ -132,10 +135,11 @@ class HomeScreen extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: (iotConnected
-                              ? AppColors.emerald
-                              : AppColors.rose)
-                              .withValues(alpha: 0.6),
+                          color:
+                              (iotConnected
+                                      ? AppColors.emerald
+                                      : AppColors.rose)
+                                  .withValues(alpha: 0.6),
                           blurRadius: 6,
                         ),
                       ],
@@ -144,8 +148,10 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     iotConnected ? 'Connected' : 'Offline',
-                    style:
-                    GoogleFonts.inter(fontSize: 12, color: AppColors.accent),
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.accent,
+                    ),
                   ),
                 ],
               ),
@@ -170,13 +176,15 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border:
-                  Border.all(color: AppColors.rose.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: AppColors.rose.withValues(alpha: 0.3),
+                  ),
                   boxShadow: const [
                     BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 12,
-                        offset: Offset(0, 4)),
+                      color: Colors.black26,
+                      blurRadius: 12,
+                      offset: Offset(0, 4),
+                    ),
                   ],
                 ),
                 child: Row(
@@ -209,7 +217,9 @@ class HomeScreen extends StatelessWidget {
                           Text(
                             'Tap to view details',
                             style: GoogleFonts.inter(
-                                fontSize: 12, color: Colors.white70),
+                              fontSize: 12,
+                              color: Colors.white70,
+                            ),
                           ),
                         ],
                       ),
@@ -349,9 +359,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-
 // _SensorCard
-
 
 class _SensorCard extends StatelessWidget {
   final String title;
@@ -389,12 +397,16 @@ class _SensorCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
-              color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
+            color: Colors.black26,
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min, // shrink-wraps to content, shrinks?!?!?!
+        mainAxisSize:
+            MainAxisSize.min, // shrink-wraps to content, shrinks?!?!?!
         children: [
           // Icon + status badge row
           Row(
@@ -410,8 +422,7 @@ class _SensorCard extends StatelessWidget {
                 child: Icon(icon, color: Colors.white, size: 20),
               ),
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor,
                   borderRadius: BorderRadius.circular(20),
@@ -451,10 +462,7 @@ class _SensorCard extends StatelessWidget {
                 ),
                 children: [
                   TextSpan(text: value),
-                  TextSpan(
-                    text: unit,
-                    style: GoogleFonts.inter(fontSize: 18),
-                  ),
+                  TextSpan(text: unit, style: GoogleFonts.inter(fontSize: 18)),
                 ],
               ),
             ),
@@ -532,7 +540,10 @@ class _NavCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: const [
             BoxShadow(
-                color: Colors.black26, blurRadius: 12, offset: Offset(0, 4)),
+              color: Colors.black26,
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
           ],
         ),
         child: Stack(

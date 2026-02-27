@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:roadsense_unang_hirit/screens/settings_screen.dart';
 import 'app_theme.dart';
 import 'models/models.dart';
 import 'screens/home_screen.dart';
 import 'widgets/bottom_nav.dart';
 import 'screens/alerts_screen.dart';
+import 'screens/iot_status_screen.dart';
 
 enum AppScreen {
   home,
@@ -106,12 +108,14 @@ class _AppShellState extends State<AppShell> {
       setState(() {
         final prev = _sensorData;
         _sensorData = SensorData(
-          floodLevel: (prev.floodLevel +
-              (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 3)
-              .clamp(0.0, 60.0),
-          temperature: (prev.temperature +
-              (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 2)
-              .clamp(20.0, 60.0),
+          floodLevel:
+              (prev.floodLevel +
+                      (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 3)
+                  .clamp(0.0, 60.0),
+          temperature:
+              (prev.temperature +
+                      (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 2)
+                  .clamp(20.0, 60.0),
           timestamp: DateTime.now(),
         );
       });
@@ -126,56 +130,67 @@ class _AppShellState extends State<AppShell> {
     final newAlerts = <AlertModel>[];
 
     if (_sensorData.floodLevel >= thresholds.floodDanger) {
-      newAlerts.add(AlertModel(
-        id: 'flood-danger-${DateTime.now().millisecondsSinceEpoch}',
-        type: AlertType.flood,
-        severity: AlertSeverity.danger,
-        message: 'DANGER: High flood level detected! Avoid this area.',
-        timestamp: DateTime.now(),
-        value: _sensorData.floodLevel,
-        acknowledged: false,
-      ));
+      newAlerts.add(
+        AlertModel(
+          id: 'flood-danger-${DateTime.now().millisecondsSinceEpoch}',
+          type: AlertType.flood,
+          severity: AlertSeverity.danger,
+          message: 'DANGER: High flood level detected! Avoid this area.',
+          timestamp: DateTime.now(),
+          value: _sensorData.floodLevel,
+          acknowledged: false,
+        ),
+      );
     } else if (_sensorData.floodLevel >= thresholds.floodCaution) {
-      newAlerts.add(AlertModel(
-        id: 'flood-caution-${DateTime.now().millisecondsSinceEpoch}',
-        type: AlertType.flood,
-        severity: AlertSeverity.caution,
-        message: 'CAUTION: Moderate flood level detected. Drive carefully.',
-        timestamp: DateTime.now(),
-        value: _sensorData.floodLevel,
-        acknowledged: false,
-      ));
+      newAlerts.add(
+        AlertModel(
+          id: 'flood-caution-${DateTime.now().millisecondsSinceEpoch}',
+          type: AlertType.flood,
+          severity: AlertSeverity.caution,
+          message: 'CAUTION: Moderate flood level detected. Drive carefully.',
+          timestamp: DateTime.now(),
+          value: _sensorData.floodLevel,
+          acknowledged: false,
+        ),
+      );
     }
 
     if (_sensorData.temperature >= thresholds.tempDanger) {
-      newAlerts.add(AlertModel(
-        id: 'temp-danger-${DateTime.now().millisecondsSinceEpoch}',
-        type: AlertType.temperature,
-        severity: AlertSeverity.danger,
-        message: 'DANGER: Engine temperature critically high!',
-        timestamp: DateTime.now(),
-        value: _sensorData.temperature,
-        acknowledged: false,
-      ));
+      newAlerts.add(
+        AlertModel(
+          id: 'temp-danger-${DateTime.now().millisecondsSinceEpoch}',
+          type: AlertType.temperature,
+          severity: AlertSeverity.danger,
+          message: 'DANGER: Engine temperature critically high!',
+          timestamp: DateTime.now(),
+          value: _sensorData.temperature,
+          acknowledged: false,
+        ),
+      );
     } else if (_sensorData.temperature >= thresholds.tempCaution) {
-      newAlerts.add(AlertModel(
-        id: 'temp-caution-${DateTime.now().millisecondsSinceEpoch}',
-        type: AlertType.temperature,
-        severity: AlertSeverity.caution,
-        message: 'CAUTION: Engine temperature elevated. Monitor closely.',
-        timestamp: DateTime.now(),
-        value: _sensorData.temperature,
-        acknowledged: false,
-      ));
+      newAlerts.add(
+        AlertModel(
+          id: 'temp-caution-${DateTime.now().millisecondsSinceEpoch}',
+          type: AlertType.temperature,
+          severity: AlertSeverity.caution,
+          message: 'CAUTION: Engine temperature elevated. Monitor closely.',
+          timestamp: DateTime.now(),
+          value: _sensorData.temperature,
+          acknowledged: false,
+        ),
+      );
     }
 
     if (newAlerts.isEmpty) return;
 
     setState(() {
-      final existingKeys =
-      _alerts.take(3).map((a) => '${a.type}-${a.severity}').toSet();
-      final toAdd = newAlerts
-          .where((a) => !existingKeys.contains('${a.type}-${a.severity}'));
+      final existingKeys = _alerts
+          .take(3)
+          .map((a) => '${a.type}-${a.severity}')
+          .toSet();
+      final toAdd = newAlerts.where(
+        (a) => !existingKeys.contains('${a.type}-${a.severity}'),
+      );
       _alerts = [...toAdd, ..._alerts];
     });
   }
@@ -192,11 +207,11 @@ class _AppShellState extends State<AppShell> {
   List<AlertModel> get _activeAlerts =>
       _alerts.where((a) => !a.acknowledged).toList();
 
-
   void _acknowledgeAlert(String id) {
     setState(() {
-      _alerts =
-          _alerts.map((a) => a.id == id ? a.copyWith(acknowledged: true) : a).toList();
+      _alerts = _alerts
+          .map((a) => a.id == id ? a.copyWith(acknowledged: true) : a)
+          .toList();
     });
   }
 
@@ -235,7 +250,6 @@ class _AppShellState extends State<AppShell> {
               constraints: const BoxConstraints(maxWidth: 400),
               child: Stack(
                 children: [
-
                   if (_currentScreen == AppScreen.home)
                     HomeScreen(
                       sensorData: _sensorData,
@@ -268,16 +282,28 @@ class _AppShellState extends State<AppShell> {
                       label: 'History',
                       onBack: () => _goTo(AppScreen.home),
                     ),
+
                   if (_currentScreen == AppScreen.settings)
-                    _PlaceholderScreen(
-                      label: 'Settings',
-                      onBack: () => _goTo(AppScreen.home),
+                    Positioned.fill(
+                      child: SettingsScreen(
+                        tempUnit: _tempUnit,
+                        distanceUnit: _distanceUnit,
+                        onBack: () => _goTo(AppScreen.home),
+                        onTempUnitChanged: (u) => setState(() => _tempUnit = u),
+                        onDistanceUnitChanged: (u) =>
+                            setState(() => _distanceUnit = u),
+                      ),
                     ),
+
                   if (_currentScreen == AppScreen.iotStatus)
-                    _PlaceholderScreen(
-                      label: 'IoT Status',
+                    IoTStatusScreen(
+                      iotConnected: _iotConnected,
+                      sensorData: _sensorData,
+                      tempUnit: _tempUnit,
+                      distanceUnit: _distanceUnit,
                       onBack: () => _goTo(AppScreen.home),
                     ),
+
                   if (_currentScreen == AppScreen.help)
                     _PlaceholderScreen(
                       label: 'Help & Info',
@@ -333,18 +359,22 @@ class _PlaceholderScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'This screen hasn\'t been made yet.',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 14),
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 14,
+            ),
           ),
           const SizedBox(height: 24),
           TextButton.icon(
             onPressed: onBack,
             icon: const Icon(Icons.arrow_back, color: AppColors.accent),
-            label: const Text('Back to Home',
-                style: TextStyle(color: AppColors.accent)),
+            label: const Text(
+              'Back to Home',
+              style: TextStyle(color: AppColors.accent),
+            ),
           ),
         ],
       ),
     );
   }
 }
-

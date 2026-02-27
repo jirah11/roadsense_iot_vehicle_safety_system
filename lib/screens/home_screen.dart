@@ -66,7 +66,7 @@ class HomeScreen extends StatelessWidget {
     final floodStatus = _floodStatus();
     final tempStatus = _tempStatus();
 
-    // Convert units for display
+    // convert display units
     final bool useInches = distanceUnit == DistanceUnit.inches;
     final bool useFahrenheit = tempUnit == TemperatureUnit.fahrenheit;
 
@@ -159,7 +159,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          //Active alerts banner
+          //active alerts banner
           if (activeAlerts.isNotEmpty)
             GestureDetector(
               onTap: () => onNavigate(AppScreen.alerts),
@@ -238,7 +238,7 @@ class HomeScreen extends StatelessWidget {
             ),
           if (activeAlerts.isNotEmpty) const SizedBox(height: 24),
 
-          //  Sensor cards
+          //  sensor cards
           Row(
             children: [
               Expanded(
@@ -280,7 +280,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          //  Navigation shortcut cards dun sa homescreen
+          //  navigation shortcut cards dun sa homescreen
           Row(
             children: [
               Expanded(
@@ -327,7 +327,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Help button
+          // help button
           GestureDetector(
             onTap: () => onNavigate(AppScreen.help),
             child: Container(
@@ -359,7 +359,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// _SensorCard
+// sensor cards
 
 class _SensorCard extends StatelessWidget {
   final String title;
@@ -408,7 +408,7 @@ class _SensorCard extends StatelessWidget {
         mainAxisSize:
             MainAxisSize.min, // shrink-wraps to content, shrinks?!?!?!
         children: [
-          // Icon + status badge row
+          // icon + status badge row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -450,8 +450,6 @@ class _SensorCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-
-          // Big value display
           Center(
             child: RichText(
               text: TextSpan(
@@ -469,7 +467,7 @@ class _SensorCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // Progress bar
+          // progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
@@ -481,7 +479,7 @@ class _SensorCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // Caution / Danger threshold labels
+          // caution / danger threshold labels
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -508,7 +506,7 @@ class _SensorCard extends StatelessWidget {
   }
 }
 
-// _NavCard sa homescreen
+// navigation clickable cards sa homescreen
 
 class _NavCard extends StatelessWidget {
   final String title;
@@ -549,7 +547,7 @@ class _NavCard extends StatelessWidget {
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // Red badge dot pag may unread alerts
+            // red badge dot pag may unread alerts
             if (badge > 0)
               Positioned(
                 top: -4,

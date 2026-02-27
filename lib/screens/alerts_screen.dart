@@ -293,6 +293,7 @@ class AlertsScreen extends StatelessWidget {
   }
 }
 
+//babasahin mo ba 'to sir pinca?
 class _AlertCard extends StatelessWidget {
   final AlertModel alert;
   final bool isActive;

@@ -142,7 +142,7 @@ class IoTStatusScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 16), //placeholder info lang sa iot since wala pa naman backend
           _progressCard(
             'Signal Strength',
             'Network connection quality',

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
 import 'package:roadsense_unang_hirit/screens/settings_screen.dart';
 import 'app_theme.dart';
 import 'models/models.dart';
@@ -305,9 +306,7 @@ class _AppShellState extends State<AppShell> {
                     ),
 
                   if (_currentScreen == AppScreen.help)
-                    _PlaceholderScreen(
-                      label: 'Help & Info',
-                      onBack: () => _goTo(AppScreen.home),
+                    HelpInfoScreen(onBack: () => _goTo(AppScreen.home),
                     ),
 
                   Positioned(

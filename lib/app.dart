@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
 import 'package:roadsense_unang_hirit/screens/settings_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide UserInfo;
 import 'app_theme.dart';
 import 'models/models.dart';
 import 'screens/home_screen.dart';
@@ -65,6 +66,10 @@ class _AppShellState extends State<AppShell> {
     );
     _alerts = _initialAlerts();
     _iotConnected = true;
+    _isAuthenticated = FirebaseAuth.instance.currentUser != null;
+    if (_isAuthenticated) {
+      _currentScreen = AppScreen.home;
+    }
     _startSensorSimulation();
   }
 
@@ -218,11 +223,23 @@ class _AppShellState extends State<AppShell> {
 
   void _goTo(AppScreen screen) => setState(() => _currentScreen = screen);
 
-  void _onLogin(String email, String password) {
-    setState(() {
-      _isAuthenticated = true;
-      _currentScreen = AppScreen.home;
-    });
+  void _onLogin(String email, String password) async {
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      setState(() {
+        _isAuthenticated = true;
+        _currentScreen = AppScreen.home;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: ${e.toString()}')),
+        );
+      }
+    }
   }
 
   void _onSignUp({
@@ -232,21 +249,34 @@ class _AppShellState extends State<AppShell> {
     required String email,
     required String phoneNumber,
     required String password,
-}) {
-    final created = DateTime.now();
-    final createdStr = '${_monthName(created.month)} ${created.day}, ${created.year}';
-    setState(() {
-      _userInfo = UserInfo(
-        firstName: firstName,
-        middleName: middleName,
-        lastName: lastName,
+  }) async {
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
-        phoneNumber: phoneNumber,
-        createdAt: createdStr,
+        password: password,
       );
-      _isAuthenticated = true;
-      _currentScreen = AppScreen.home;
-    });
+      final created = DateTime.now();
+      final createdStr = '${_monthName(created.month)} ${created.day}, ${created.year}';
+      setState(() {
+        _userInfo = UserInfo(
+          firstName: firstName,
+          middleName: middleName,
+          lastName: lastName,
+          email: email,
+          phoneNumber: phoneNumber,
+          createdAt: createdStr,
+        );
+        _isAuthenticated = true;
+        _currentScreen = AppScreen.home;
+      });
+    } catch (e) {
+      // Handle signup errors, e.g., show a snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Signup failed: ${e.toString()}')),
+        );
+      }
+    }
   }
 
   String _monthName(int month) {

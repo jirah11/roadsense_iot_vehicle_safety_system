@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../app.dart';
 import '../app_theme.dart';
 //call shi
 //if clinick yung sign up na button mapupunta sa sign-up

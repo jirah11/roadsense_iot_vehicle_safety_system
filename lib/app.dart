@@ -8,8 +8,13 @@ import 'screens/home_screen.dart';
 import 'widgets/bottom_nav.dart';
 import 'screens/alerts_screen.dart';
 import 'screens/iot_status_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/signup_screen.dart';
+
 
 enum AppScreen {
+  login,
+  signup,
   home,
   alerts,
   vehicle,
@@ -32,13 +37,15 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  AppScreen _currentScreen = AppScreen.home;
+  AppScreen _currentScreen = AppScreen.login;
+  bool _isAuthenticated = false;
 
   late VehicleType _vehicleType;
   late String _vehicleNickname;
   late SensorData _sensorData;
   late List<AlertModel> _alerts;
   late bool _iotConnected;
+  late UserInfo _userInfo;
 
   TemperatureUnit _tempUnit = TemperatureUnit.celsius;
   DistanceUnit _distanceUnit = DistanceUnit.centimeters;
@@ -48,6 +55,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    _userInfo = const UserInfo();
     _vehicleType = VehicleType.sedan;
     _vehicleNickname = 'My Vehicle';
     _sensorData = SensorData(
@@ -208,6 +216,45 @@ class _AppShellState extends State<AppShell> {
   List<AlertModel> get _activeAlerts =>
       _alerts.where((a) => !a.acknowledged).toList();
 
+  void _goTo(AppScreen screen) => setState(() => _currentScreen = screen);
+
+  void _onLogin(String email, String password) {
+    setState(() {
+      _isAuthenticated = true;
+      _currentScreen = AppScreen.home;
+    });
+  }
+
+  void _onSignUp({
+    required String firstName,
+    required String middleName,
+    required String lastName,
+    required String email,
+    required String phoneNumber,
+    required String password,
+}) {
+    final created = DateTime.now();
+    final createdStr = '${_monthName(created.month)} ${created.day}, ${created.year}';
+    setState(() {
+      _userInfo = UserInfo(
+        firstName: firstName,
+        middleName: middleName,
+        lastName: lastName,
+        email: email,
+        phoneNumber: phoneNumber,
+        createdAt: createdStr,
+      );
+      _isAuthenticated = true;
+      _currentScreen = AppScreen.home;
+    });
+  }
+
+  String _monthName(int month) {
+    const names = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+    return names[month - 1];
+  }
+
   void _acknowledgeAlert(String id) {
     setState(() {
       _alerts = _alerts
@@ -224,7 +271,7 @@ class _AppShellState extends State<AppShell> {
 
   // navigation nung mga cards sa home screen
 
-  void _goTo(AppScreen screen) => setState(() => _currentScreen = screen);
+
 
   // build
 
@@ -251,6 +298,16 @@ class _AppShellState extends State<AppShell> {
               constraints: const BoxConstraints(maxWidth: 400),
               child: Stack(
                 children: [
+                  if (_currentScreen == AppScreen.login)
+                    LoginScreen(
+                        onGoToSignUp: () => _goTo(AppScreen.signup),
+                        onLogin: _onLogin,
+                    ),
+                  if (_currentScreen == AppScreen.signup)
+                    SignUpScreen(
+                      onGoToLogin: () => _goTo(AppScreen.login),
+                      onSignUp: _onSignUp,
+                    ),
                   if (_currentScreen == AppScreen.home)
                     HomeScreen(
                       sensorData: _sensorData,
@@ -308,7 +365,8 @@ class _AppShellState extends State<AppShell> {
                   if (_currentScreen == AppScreen.help)
                     HelpInfoScreen(onBack: () => _goTo(AppScreen.home),
                     ),
-
+                  if (_currentScreen != AppScreen.login &&
+                      _currentScreen != AppScreen.signup)
                   Positioned(
                     left: 0,
                     right: 0,

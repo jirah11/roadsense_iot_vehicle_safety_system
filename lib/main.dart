@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:roadsense_unang_hirit/app.dart';
+import 'package:firebase_core/firebase_core.dart';
 
-void main() {
-  runApp(const RoadSenseApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(RoadSenseApp());
 }
 
 class RoadSenseApp extends StatelessWidget {

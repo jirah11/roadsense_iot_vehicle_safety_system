@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart' as cloud_firestore;
 import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
 import 'package:roadsense_unang_hirit/screens/history_logs_screen.dart';
 import 'package:roadsense_unang_hirit/screens/settings_screen.dart';
@@ -253,12 +254,32 @@ class _AppShellState extends State<AppShell> {
     required String password,
   }) async {
     try {
-      await firebase_auth.FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // Create user in Firebase Auth
+      final userCredential = await firebase_auth.FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+      
+      // Create user data
       final created = DateTime.now();
       final createdStr = '${_monthName(created.month)} ${created.day}, ${created.year}';
+      
+      final userModel = UserModel(
+        uid: userCredential.user!.uid,
+        firstName: firstName,
+        middleName: middleName,
+        lastName: lastName,
+        email: email,
+        phoneNumber: phoneNumber,
+        createdAt: createdStr,
+      );
+      
+      // Save user data to Firestore
+      await cloud_firestore.FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set(userModel.toMap());
+      
       setState(() {
         _userInfo = UserInfo(
           firstName: firstName,

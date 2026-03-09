@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
 import 'package:roadsense_unang_hirit/screens/settings_screen.dart';
+import 'package:roadsense_unang_hirit/screens/vehicle_profile_screen.dart';
 import 'app_theme.dart';
 import 'models/models.dart';
 import 'screens/home_screen.dart';
@@ -10,6 +11,7 @@ import 'screens/alerts_screen.dart';
 import 'screens/iot_status_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
+import 'screens/my_account_screen.dart';
 
 
 enum AppScreen {
@@ -38,14 +40,16 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   AppScreen _currentScreen = AppScreen.login;
-  bool _isAuthenticated = false;
+  bool _isAuthenticated = false; //tinatrack if user ay logged in or nah
 
   late VehicleType _vehicleType;
   late String _vehicleNickname;
   late SensorData _sensorData;
   late List<AlertModel> _alerts;
   late bool _iotConnected;
-  late UserInfo _userInfo;
+  late UserInfo _userInfo; //holds profile data
+  late bool _notificationsEnabled;
+  late bool _soundEnabled;
 
   TemperatureUnit _tempUnit = TemperatureUnit.celsius;
   DistanceUnit _distanceUnit = DistanceUnit.centimeters;
@@ -65,6 +69,8 @@ class _AppShellState extends State<AppShell> {
     );
     _alerts = _initialAlerts();
     _iotConnected = true;
+    _notificationsEnabled = true;
+    _soundEnabled = true;
     _startSensorSimulation();
   }
 
@@ -110,7 +116,7 @@ class _AppShellState extends State<AppShell> {
       ),
     ];
   }
-
+// generated number every 3 sec for the sensors, kada mag-uupdate, icacall _checkAlerts()
   void _startSensorSimulation() {
     _sensorTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!mounted) return;
@@ -213,6 +219,7 @@ class _AppShellState extends State<AppShell> {
   //  Convenience getters
 
   VehicleThresholds get _thresholds => VehicleThresholds.forType(_vehicleType);
+
   List<AlertModel> get _activeAlerts =>
       _alerts.where((a) => !a.acknowledged).toList();
 
@@ -255,6 +262,14 @@ class _AppShellState extends State<AppShell> {
     return names[month - 1];
   }
 
+  void _onLogout() {
+    setState(() {
+      _isAuthenticated = false;
+      _currentScreen = AppScreen.login;
+      _userInfo = const UserInfo();
+    });
+  }
+
   void _acknowledgeAlert(String id) {
     setState(() {
       _alerts = _alerts
@@ -269,12 +284,21 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  void _onDeactivateAccount() {
+    _onLogout();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your account has been deactivated.')),
+      );
+    }
+  }
+
   // navigation nung mga cards sa home screen
 
 
 
   // build
-
+  // going from home screen to other screens using the nav bar or nav cards sa home screen
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -303,11 +327,22 @@ class _AppShellState extends State<AppShell> {
                         onGoToSignUp: () => _goTo(AppScreen.signup),
                         onLogin: _onLogin,
                     ),
+
                   if (_currentScreen == AppScreen.signup)
                     SignUpScreen(
                       onGoToLogin: () => _goTo(AppScreen.login),
                       onSignUp: _onSignUp,
                     ),
+
+                  if (_currentScreen == AppScreen.myAccount)
+                    MyAccountScreen(
+                      userInfo: _userInfo,
+                      onBack: () => _goTo(AppScreen.settings),
+                      onUserInfoChanged: (info) => setState(() => _userInfo = info),
+                      onLogout: _onLogout,
+                      onDeactivateAccount: _onDeactivateAccount,
+                    ),
+
                   if (_currentScreen == AppScreen.home)
                     HomeScreen(
                       sensorData: _sensorData,
@@ -331,10 +366,19 @@ class _AppShellState extends State<AppShell> {
                     ),
 
                   if (_currentScreen == AppScreen.vehicle)
-                    _PlaceholderScreen(
-                      label: 'Vehicle',
-                      onBack: () => _goTo(AppScreen.home),
+                    VehicleProfileScreen(
+                        vehicleType: _vehicleType,
+                        vehicleNickname: _vehicleNickname,
+                        thresholds: _thresholds,
+                        onBack: () => _goTo(AppScreen.home),
+                        onSave: (type, nickname, thresholds) {
+                          setState(() {
+                            _vehicleType = type;
+                            _vehicleNickname = nickname;
+                          });
+                        },
                     ),
+
                   if (_currentScreen == AppScreen.history)
                     _PlaceholderScreen(
                       label: 'History',
@@ -342,16 +386,21 @@ class _AppShellState extends State<AppShell> {
                     ),
 
                   if (_currentScreen == AppScreen.settings)
-                    Positioned.fill(
-                      child: SettingsScreen(
-                        tempUnit: _tempUnit,
-                        distanceUnit: _distanceUnit,
-                        onBack: () => _goTo(AppScreen.home),
-                        onTempUnitChanged: (u) => setState(() => _tempUnit = u),
-                        onDistanceUnitChanged: (u) =>
-                            setState(() => _distanceUnit = u),
-                      ),
+                    SettingsScreen(
+                      userInfo: _userInfo,
+                      notificationsEnabled: _notificationsEnabled,
+                      soundEnabled: _soundEnabled,
+                      tempUnit: _tempUnit,
+                      distanceUnit: _distanceUnit,
+                      onBack: () => _goTo(AppScreen.home),
+                      onNotificationsChanged: (v) => setState(() => _notificationsEnabled = v),
+                      onSoundChanged: (v) => setState(() => _soundEnabled = v),
+                      onTempUnitChanged: (u) => setState(() => _tempUnit = u),
+                      onDistanceUnitChanged: (u) => setState(() => _distanceUnit = u),
+                      onUserInfoChanged: (info) => setState(() => _userInfo = info),
+                      onGoToMyAccount: () => _goTo(AppScreen.myAccount),
                     ),
+
 
                   if (_currentScreen == AppScreen.iotStatus)
                     IoTStatusScreen(
@@ -365,6 +414,7 @@ class _AppShellState extends State<AppShell> {
                   if (_currentScreen == AppScreen.help)
                     HelpInfoScreen(onBack: () => _goTo(AppScreen.home),
                     ),
+
                   if (_currentScreen != AppScreen.login &&
                       _currentScreen != AppScreen.signup)
                   Positioned(

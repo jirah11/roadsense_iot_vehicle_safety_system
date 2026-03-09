@@ -2,40 +2,60 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app.dart';
 import '../app_theme.dart';
+import '../models/user_info.dart';
 
-//mga pangcall sa settings screen
+// mga pangcall, dinedefine niya yung data na kailangan sa screen
 class SettingsScreen extends StatefulWidget {
+  final UserInfo userInfo;
+  final bool notificationsEnabled;
+  final bool soundEnabled;
   final TemperatureUnit tempUnit;
   final DistanceUnit distanceUnit;
   final VoidCallback onBack;
+  final ValueChanged<bool> onNotificationsChanged;
+  final ValueChanged<bool> onSoundChanged;
   final ValueChanged<TemperatureUnit> onTempUnitChanged;
   final ValueChanged<DistanceUnit> onDistanceUnitChanged;
+  final ValueChanged<UserInfo> onUserInfoChanged;
+  final VoidCallback onGoToMyAccount;
+
 
   const SettingsScreen({
     super.key,
+    required this.userInfo,
+    required this.notificationsEnabled,
+    required this.soundEnabled,
     required this.tempUnit,
     required this.distanceUnit,
     required this.onBack,
+    required this.onNotificationsChanged,
+    required this.onSoundChanged,
     required this.onTempUnitChanged,
     required this.onDistanceUnitChanged,
+    required this.onUserInfoChanged,
+    required this.onGoToMyAccount,
   });
+
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
+//toggle sa visibility pag clinick yung wifi config
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _showWifiConfig = false;
   final TextEditingController _ssidController =
-  TextEditingController(text: 'RoadSense-IoT');
-  final TextEditingController _passwordController = TextEditingController();
+  TextEditingController(text: 'RoadSense-IoT'); //text input for iot
+  final TextEditingController _passwordController = TextEditingController(); //text input password shi
 
+//kiniclear yung controllers from memory pag umalis si user sa settings
   @override
   void dispose() {
     _ssidController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -54,46 +74,119 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Settings',
-                    style: GoogleFonts.inter(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    'Configure app preferences',
-                    style: GoogleFonts.inter(fontSize: 14, color: AppColors.accent),
-                  ),
+                  Text('Settings', style: GoogleFonts.inter(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text('Configure app preferences', style: GoogleFonts.inter(fontSize: 14, color: AppColors.accent)),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 24),
-
-          // display units
-          Text(
-            'Display Units',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+          Text('Account Management', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: widget.onGoToMyAccount,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primary.withValues(alpha: 0.3), AppColors.primary.withValues(alpha: 0.2)],
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.person_outline, color: Colors.white),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('My Account',
+                            style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white)),
+                        Text('Manage account information', style: GoogleFonts.inter(fontSize: 12, color: Colors.white60)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
+                ],
+              ),
             ),
           ),
+          const SizedBox(height: 24),
+          Text('Notifications', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.cardDark, AppColors.cardDarker],
-              ),
+              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.cardDark, AppColors.cardDarker]),
               borderRadius: BorderRadius.circular(20),
-              boxShadow: const [
-                BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: const Offset(0, 2))],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.notifications_outlined, color: Colors.white70, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Push Notifications', style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: Colors.white)),
+                          Text('Receive alert notifications', style: GoogleFonts.inter(fontSize: 12, color: Colors.white60)),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: widget.notificationsEnabled,
+                      onChanged: widget.onNotificationsChanged,
+                      activeThumbColor: AppColors.emerald,
+                    ),
+                  ],
+                ),
+                Divider(color: Colors.white.withValues(alpha: 0.1), height: 24),
+                Row(
+                  children: [
+                    Icon(Icons.volume_up_outlined, color: Colors.white70, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Sound Alerts', style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: Colors.white)),
+                          Text('Play sound for warnings', style: GoogleFonts.inter(fontSize: 12, color: Colors.white60)),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: widget.soundEnabled,
+                      onChanged: widget.onSoundChanged,
+                      activeThumbColor: AppColors.emerald,
+                    ),
+                  ],
+                ),
               ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text('Display Units', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppColors.cardDark, AppColors.cardDarker]),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: const Offset(0, 2))],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,13 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   children: [
                     Icon(Icons.thermostat, color: Colors.white70, size: 22),
                     const SizedBox(width: 8),
-                    Text(
-                      'Temperature',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    ),
+                    Text('Temperature', style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: Colors.white)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -118,7 +205,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: _unitButton(
                         label: 'Celsius (°C)',
                         isActive: widget.tempUnit == TemperatureUnit.celsius,
-                        onTap: () => widget.onTempUnitChanged(TemperatureUnit.celsius),
+                        onTap: () =>
+                            widget.onTempUnitChanged(TemperatureUnit.celsius),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -126,24 +214,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: _unitButton(
                         label: 'Fahrenheit (°F)',
                         isActive: widget.tempUnit == TemperatureUnit.fahrenheit,
-                        onTap: () => widget.onTempUnitChanged(TemperatureUnit.fahrenheit),
+                        onTap: () =>
+                            widget.onTempUnitChanged(TemperatureUnit.fahrenheit),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-
                 Row(
                   children: [
                     Icon(Icons.straighten, color: Colors.white70, size: 22),
                     const SizedBox(width: 8),
-                    Text(
-                      'Distance',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    ),
+                    Text('Distance', style: GoogleFonts.inter(fontWeight: FontWeight.w500, color: Colors.white)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -153,7 +235,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: _unitButton(
                         label: 'Centimeters',
                         isActive: widget.distanceUnit == DistanceUnit.centimeters,
-                        onTap: () => widget.onDistanceUnitChanged(DistanceUnit.centimeters),
+                        onTap: () => widget
+                            .onDistanceUnitChanged(DistanceUnit.centimeters),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -161,7 +244,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: _unitButton(
                         label: 'Inches',
                         isActive: widget.distanceUnit == DistanceUnit.inches,
-                        onTap: () => widget.onDistanceUnitChanged(DistanceUnit.inches),
+                        onTap: () =>
+                            widget.onDistanceUnitChanged(DistanceUnit.inches),
                       ),
                     ),
                   ],
@@ -170,16 +254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-
-          // iot device
-          Text(
-            'IoT Device',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
+          Text('IoT Device', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(16),
@@ -190,13 +265,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 colors: [AppColors.cardDark, AppColors.cardDarker],
               ),
               borderRadius: BorderRadius.circular(20),
-              boxShadow: const [
-                BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 8,
+                    offset: const Offset(0, 2))
               ],
             ),
             child: Column(
               children: [
-                // wifi config
                 GestureDetector(
                   onTap: () => setState(() => _showWifiConfig = !_showWifiConfig),
                   child: Row(
@@ -207,20 +284,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'WiFi Configuration',
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Text(
-                              'Configure device connection',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: Colors.white60,
-                              ),
-                            ),
+                            Text('WiFi Configuration',
+                                style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white)),
+                            Text('Configure device connection',
+                                style: GoogleFonts.inter(
+                                    fontSize: 12, color: Colors.white60)),
                           ],
                         ),
                       ),
@@ -234,8 +304,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
-
-                // wifi config if clinick
                 if (_showWifiConfig) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -247,10 +315,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Network SSID',
-                          style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
-                        ),
+                        Text('Network SSID',
+                            style: GoogleFonts.inter(
+                                fontSize: 12, color: Colors.white70)),
                         const SizedBox(height: 6),
                         TextField(
                           controller: _ssidController,
@@ -258,24 +325,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           decoration: InputDecoration(
                             hintText: 'WiFi Network Name',
                             hintStyle: GoogleFonts.inter(
-                              color: Colors.white38,
-                              fontSize: 14,
-                            ),
+                                color: Colors.white38, fontSize: 14),
                             filled: true,
                             fillColor: Colors.white.withValues(alpha: 0.05),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.2),
-                              ),
+                                  color: Colors.white.withValues(alpha: 0.2)),
                             ),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Text(
-                          'Password',
-                          style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
-                        ),
+                        Text('Password',
+                            style: GoogleFonts.inter(
+                                fontSize: 12, color: Colors.white70)),
                         const SizedBox(height: 6),
                         TextField(
                           controller: _passwordController,
@@ -284,22 +347,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           decoration: InputDecoration(
                             hintText: 'WiFi Password',
                             hintStyle: GoogleFonts.inter(
-                              color: Colors.white38,
-                              fontSize: 14,
-                            ),
+                                color: Colors.white38, fontSize: 14),
                             filled: true,
                             fillColor: Colors.white.withValues(alpha: 0.05),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.2),
-                              ),
+                                  color: Colors.white.withValues(alpha: 0.2)),
                             ),
-                            suffixIcon: const Icon(
-                              Icons.visibility_off,
-                              color: Colors.white54,
-                              size: 18,
-                            ),
+                            suffixIcon: const Icon(Icons.visibility_off,
+                                color: Colors.white54, size: 18),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -308,21 +365,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: ElevatedButton(
                             onPressed: () {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('WiFi settings saved')),
+                                const SnackBar(
+                                  content: Text('WiFi settings saved'),
+                                ),
                               );
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.primary,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding:
+                              const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            child: Text(
-                              'Save WiFi Settings',
-                              style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-                            ),
+                            child: Text('Save WiFi Settings',
+                                style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w600)),
                           ),
                         ),
                       ],
@@ -350,7 +409,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           backgroundColor: Colors.white.withValues(alpha: 0.12),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           elevation: 0,
         ),
         child: Text(label, style: GoogleFonts.inter(fontSize: 12)),
@@ -368,3 +428,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 }
+

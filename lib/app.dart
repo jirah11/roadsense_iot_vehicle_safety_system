@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
+import 'package:roadsense_unang_hirit/screens/history_logs_screen.dart';
 import 'package:roadsense_unang_hirit/screens/settings_screen.dart';
 import 'package:roadsense_unang_hirit/screens/vehicle_profile_screen.dart';
 import 'app_theme.dart';
@@ -380,9 +381,11 @@ class _AppShellState extends State<AppShell> {
                     ),
 
                   if (_currentScreen == AppScreen.history)
-                    _PlaceholderScreen(
-                      label: 'History',
-                      onBack: () => _goTo(AppScreen.home),
+                    HistoryLogsScreen(
+                        alerts: _alerts,
+                        tempUnit: _tempUnit,
+                        distanceUnit: _distanceUnit,
+                        onBack: () => _goTo(AppScreen.home),
                     ),
 
                   if (_currentScreen == AppScreen.settings)

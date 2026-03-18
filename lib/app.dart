@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:cloud_firestore/cloud_firestore.dart' as cloud_firestore;
+import 'package:roadsense_unang_hirit/backend/firebase_service.dart';
 import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
 import 'package:roadsense_unang_hirit/screens/history_logs_screen.dart';
 import 'package:roadsense_unang_hirit/screens/settings_screen.dart';
@@ -228,10 +227,8 @@ class _AppShellState extends State<AppShell> {
 
   void _onLogin(String email, String password) async {
     try {
-      await firebase_auth.FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      await FirebaseService.signIn(email: email, password: password);
+
       setState(() {
         _isAuthenticated = true;
         _currentScreen = AppScreen.home;
@@ -255,15 +252,12 @@ class _AppShellState extends State<AppShell> {
   }) async {
     try {
       // Create user in Firebase Auth
-      final userCredential = await firebase_auth.FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      
+      final userCredential = await FirebaseService.signUp(email: email, password: password);
+
       // Create user data
       final created = DateTime.now();
       final createdStr = '${_monthName(created.month)} ${created.day}, ${created.year}';
-      
+
       final userModel = UserModel(
         uid: userCredential.user!.uid,
         firstName: firstName,
@@ -273,13 +267,10 @@ class _AppShellState extends State<AppShell> {
         phoneNumber: phoneNumber,
         createdAt: createdStr,
       );
-      
+
       // Save user data to Firestore
-      await cloud_firestore.FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set(userModel.toMap());
-      
+      await FirebaseService.createUserDocument(userModel);
+
       setState(() {
         _userInfo = UserInfo(
           firstName: firstName,

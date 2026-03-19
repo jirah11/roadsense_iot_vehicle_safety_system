@@ -9,7 +9,7 @@ class MyAccountScreen extends StatefulWidget {
   final VoidCallback onBack;
   final ValueChanged<UserInfo> onUserInfoChanged;
   final VoidCallback onLogout;
-  final VoidCallback onDeactivateAccount;
+  final VoidCallback onDeleteAccount;
 
   const MyAccountScreen({
     super.key,
@@ -17,7 +17,7 @@ class MyAccountScreen extends StatefulWidget {
     required this.onBack,
     required this.onUserInfoChanged,
     required this.onLogout,
-    required this.onDeactivateAccount,
+    required this.onDeleteAccount,
   });
 
   @override
@@ -28,7 +28,6 @@ class MyAccountScreen extends StatefulWidget {
 class _MyAccountScreenState extends State<MyAccountScreen> {
   bool _isEditing = false;
   bool _showChangePassword = false;
-  bool _showDeactivateConfirm = false;
   late TextEditingController _firstName;
   late TextEditingController _middleName;
   late TextEditingController _lastName;
@@ -446,40 +445,12 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               ),
             ),
           ),
-          //deactivate account section
+          // delete account section
           const SizedBox(height: 16),
-          if (!_showDeactivateConfirm)
-            GestureDetector(
-              onTap: () => setState(() => _showDeactivateConfirm = true),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.rose.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.rose.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.delete_outline, color: AppColors.rose, size: 22),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Deactivate Account',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.rose,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            //modal if clinick mo deactivate account
-            Container(
+          GestureDetector(
+            onTap: _showDeleteAccountConfirmation,
+            child: Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.rose.withValues(alpha: 0.2),
@@ -488,50 +459,63 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                   color: AppColors.rose.withValues(alpha: 0.3),
                 ),
               ),
-              child: Column(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                  Icon(Icons.delete_outline, color: AppColors.rose, size: 22),
+                  const SizedBox(width: 8),
                   Text(
-                    'Are you sure you want to deactivate your account? This action cannot be undone.',
-                    style: GoogleFonts.inter(fontSize: 14, color: Colors.white),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () =>
-                              setState(() => _showDeactivateConfirm = false),
-                          child: Text(
-                            'Cancel',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: widget.onDeactivateAccount,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.rose,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: Text(
-                            'Confirm',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    'Delete Account',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.rose,
+                    ),
                   ),
                 ],
               ),
             ),
+          ),
         ],
       ),
+    );
+  }
+
+  void _showDeleteAccountConfirmation() {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.cardDark,
+          title: Text(
+            'Delete account',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+          ),
+          content: Text(
+            'This action is permanent and cannot be undone. Your account data will be removed from our system.',
+            style: GoogleFonts.inter(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(color: Colors.white),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.rose),
+              onPressed: () {
+                Navigator.of(context).pop();
+                widget.onDeleteAccount();
+              },
+              child: Text(
+                'Delete',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

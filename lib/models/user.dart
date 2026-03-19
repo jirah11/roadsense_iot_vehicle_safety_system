@@ -6,6 +6,8 @@ class UserModel {
   final String email;
   final String phoneNumber;
   final String createdAt;
+  final String vehicleType;
+  final String vehicleNickname;
 
   UserModel({
     required this.uid,
@@ -15,6 +17,8 @@ class UserModel {
     required this.email,
     required this.phoneNumber,
     required this.createdAt,
+    required this.vehicleType,
+    required this.vehicleNickname,
   });
 
   Map<String, dynamic> toMap() {
@@ -25,6 +29,8 @@ class UserModel {
       'email': email,
       'phoneNumber': phoneNumber,
       'createdAt': createdAt,
+      'vehicleType': vehicleType,
+      'vehicleNickname': vehicleNickname,
     };
   }
 
@@ -37,6 +43,8 @@ class UserModel {
       email: map['email'] ?? '',
       phoneNumber: map['phoneNumber'] ?? '',
       createdAt: map['createdAt'] ?? '',
+      vehicleType: map['vehicleType'] ?? 'sedan',
+      vehicleNickname: map['vehicleNickname'] ?? 'My Vehicle',
     );
   }
 }

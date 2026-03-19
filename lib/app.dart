@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:roadsense_unang_hirit/backend/firebase_service.dart';
 import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
 import 'package:roadsense_unang_hirit/screens/history_logs_screen.dart';
@@ -50,8 +51,8 @@ class _AppShellState extends State<AppShell> {
   late List<AlertModel> _alerts;
   late bool _iotConnected;
   late UserInfo _userInfo; //holds profile data
-  late bool _notificationsEnabled;
-  late bool _soundEnabled;
+  bool _notificationsEnabled = true;
+  bool _soundEnabled = true;
 
   TemperatureUnit _tempUnit = TemperatureUnit.celsius;
   DistanceUnit _distanceUnit = DistanceUnit.centimeters;
@@ -71,6 +72,8 @@ class _AppShellState extends State<AppShell> {
     );
     _alerts = _initialAlerts();
     _iotConnected = true;
+    _notificationsEnabled = true;
+    _soundEnabled = true;
     _startSensorSimulation();
   }
 
@@ -227,16 +230,43 @@ class _AppShellState extends State<AppShell> {
 
   void _onLogin(String email, String password) async {
     try {
-      await FirebaseService.signIn(email: email, password: password);
-
-      setState(() {
-        _isAuthenticated = true;
-        _currentScreen = AppScreen.home;
-      });
+      final userCredential = await FirebaseService.signIn(email: email, password: password);
+      final userModel = await FirebaseService.getUserDocument(userCredential.user!.uid);
+      if (userModel != null) {
+        setState(() {
+          _userInfo = UserInfo(
+            firstName: userModel.firstName,
+            middleName: userModel.middleName,
+            lastName: userModel.lastName,
+            email: userModel.email,
+            phoneNumber: userModel.phoneNumber,
+            createdAt: userModel.createdAt,
+            vehicleType: userModel.vehicleType,
+            vehicleNickname: userModel.vehicleNickname,
+          );
+          _vehicleType = vehicleTypeFromString(userModel.vehicleType);
+          _vehicleNickname = userModel.vehicleNickname;
+          _isAuthenticated = true;
+          _currentScreen = AppScreen.home;
+        });
+      } else {
+        // Handle case where user document doesn't exist
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User data not found. Please contact support.')),
+          );
+        }
+      }
     } catch (e) {
+      String errorMessage;
+      if (e is firebase_auth.FirebaseAuthException && e.code == 'invalid-credential') {
+        errorMessage = 'Login denied: Your email or password is incorrect.';
+      } else {
+        errorMessage = 'Login failed: ${e.toString()}';
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: ${e.toString()}')),
+          SnackBar(content: Text(errorMessage)),
         );
       }
     }
@@ -266,6 +296,8 @@ class _AppShellState extends State<AppShell> {
         email: email,
         phoneNumber: phoneNumber,
         createdAt: createdStr,
+        vehicleType: _vehicleType.name,
+        vehicleNickname: _vehicleNickname,
       );
 
       // Save user data to Firestore
@@ -279,6 +311,8 @@ class _AppShellState extends State<AppShell> {
           email: email,
           phoneNumber: phoneNumber,
           createdAt: createdStr,
+          vehicleType: _vehicleType.name,
+          vehicleNickname: _vehicleNickname,
         );
         _isAuthenticated = true;
         _currentScreen = AppScreen.home;
@@ -321,11 +355,35 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-  void _onDeactivateAccount() {
+  void _onDeleteAccount() async {
+    final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+
+    if (uid != null) {
+      try {
+        await FirebaseService.deleteUserDocument(uid);
+      } catch (_) {
+        // ignore errors while deleting user document
+      }
+    }
+
+    var authDeleted = false;
+    try {
+      await FirebaseService.deleteAuthUser();
+      authDeleted = true;
+    } catch (e) {
+      // Deleting the auth user might fail if the user needs to reauthenticate.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Account deletion failed: ${e.toString()}')),
+        );
+      }
+    }
+
     _onLogout();
-    if (mounted) {
+
+    if (mounted && authDeleted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Your account has been deactivated.')),
+        const SnackBar(content: Text('Your account has been deleted.')),
       );
     }
   }
@@ -375,9 +433,21 @@ class _AppShellState extends State<AppShell> {
                     MyAccountScreen(
                       userInfo: _userInfo,
                       onBack: () => _goTo(AppScreen.settings),
-                      onUserInfoChanged: (info) => setState(() => _userInfo = info),
+                      onUserInfoChanged: (info) async {
+                        final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+                        if (uid != null) {
+                          await FirebaseService.updateUserDocument(uid, {
+                            'firstName': info.firstName,
+                            'middleName': info.middleName,
+                            'lastName': info.lastName,
+                            'email': info.email,
+                            'phoneNumber': info.phoneNumber,
+                          });
+                        }
+                        setState(() => _userInfo = info);
+                      },
                       onLogout: _onLogout,
-                      onDeactivateAccount: _onDeactivateAccount,
+                      onDeleteAccount: _onDeleteAccount,
                     ),
 
                   if (_currentScreen == AppScreen.home)
@@ -404,16 +474,24 @@ class _AppShellState extends State<AppShell> {
 
                   if (_currentScreen == AppScreen.vehicle)
                     VehicleProfileScreen(
-                        vehicleType: _vehicleType,
-                        vehicleNickname: _vehicleNickname,
-                        thresholds: _thresholds,
-                        onBack: () => _goTo(AppScreen.home),
-                        onSave: (type, nickname, thresholds) {
-                          setState(() {
-                            _vehicleType = type;
-                            _vehicleNickname = nickname;
+                      vehicleType: _vehicleType,
+                      vehicleNickname: _vehicleNickname,
+                      thresholds: _thresholds,
+                      onBack: () => _goTo(AppScreen.home),
+                      onSave: (type, nickname, thresholds) async {
+                        setState(() {
+                          _vehicleType = type;
+                          _vehicleNickname = nickname;
+                        });
+
+                        final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+                        if (uid != null) {
+                          await FirebaseService.updateUserDocument(uid, {
+                            'vehicleType': type.name,
+                            'vehicleNickname': nickname,
                           });
-                        },
+                        }
+                      },
                     ),
 
                   if (_currentScreen == AppScreen.history)

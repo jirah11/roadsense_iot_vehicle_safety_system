@@ -26,4 +26,27 @@ class FirebaseService {
   static Future<void> createUserDocument(UserModel user) {
     return firestore.collection('users').doc(user.uid).set(user.toMap());
   }
+
+  static Future<UserModel?> getUserDocument(String uid) async {
+    final doc = await firestore.collection('users').doc(uid).get();
+    if (doc.exists) {
+      return UserModel.fromMap(doc.data()!, uid);
+    }
+    return null;
+  }
+
+  static Future<void> updateUserDocument(String uid, Map<String, dynamic> data) {
+    return firestore.collection('users').doc(uid).update(data);
+  }
+
+  static Future<void> deleteUserDocument(String uid) {
+    return firestore.collection('users').doc(uid).delete();
+  }
+
+  static Future<void> deleteAuthUser() async {
+    final user = auth.currentUser;
+    if (user != null) {
+      await user.delete();
+    }
+  }
 }

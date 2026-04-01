@@ -495,7 +495,7 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
             color: selected
                 ? Colors.white.withValues(alpha: 0.18)
                 : Colors.white.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(999),
             border: Border.all(
               color: selected
                   ? Colors.white.withValues(alpha: 0.22)

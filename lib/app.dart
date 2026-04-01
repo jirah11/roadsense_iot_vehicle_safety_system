@@ -503,19 +503,21 @@ class _AppShellState extends State<AppShell> {
                     ),
 
                   if (_currentScreen == AppScreen.settings)
-                    SettingsScreen(
-                      userInfo: _userInfo,
-                      notificationsEnabled: _notificationsEnabled,
-                      soundEnabled: _soundEnabled,
-                      tempUnit: _tempUnit,
-                      distanceUnit: _distanceUnit,
-                      onBack: () => _goTo(AppScreen.home),
-                      onNotificationsChanged: (v) => setState(() => _notificationsEnabled = v),
-                      onSoundChanged: (v) => setState(() => _soundEnabled = v),
-                      onTempUnitChanged: (u) => setState(() => _tempUnit = u),
-                      onDistanceUnitChanged: (u) => setState(() => _distanceUnit = u),
-                      onUserInfoChanged: (info) => setState(() => _userInfo = info),
-                      onGoToMyAccount: () => _goTo(AppScreen.myAccount),
+                    Positioned.fill(
+                        child: SettingsScreen(
+                          userInfo: _userInfo,
+                          notificationsEnabled: _notificationsEnabled,
+                          soundEnabled: _soundEnabled,
+                          tempUnit: _tempUnit,
+                          distanceUnit: _distanceUnit,
+                          onBack: () => _goTo(AppScreen.home),
+                          onNotificationsChanged: (v) => setState(() => _notificationsEnabled = v),
+                          onSoundChanged: (v) => setState(() => _soundEnabled = v),
+                          onTempUnitChanged: (u) => setState(() => _tempUnit = u),
+                          onDistanceUnitChanged: (u) => setState(() => _distanceUnit = u),
+                          onUserInfoChanged: (info) => setState(() => _userInfo = info),
+                          onGoToMyAccount: () => _goTo(AppScreen.myAccount),
+                        ),
                     ),
 
 

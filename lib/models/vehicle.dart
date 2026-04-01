@@ -75,3 +75,11 @@ class VehicleThresholds {
     }
   }
 }
+
+VehicleType vehicleTypeFromString(String? value) {
+  if (value == null) return VehicleType.sedan;
+  return VehicleType.values.firstWhere(
+        (t) => t.name.toLowerCase() == value.toLowerCase(),
+    orElse: () => VehicleType.sedan,
+  );
+}

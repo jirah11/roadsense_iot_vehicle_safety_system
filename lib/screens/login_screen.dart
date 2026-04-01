@@ -7,11 +7,13 @@ class LoginScreen extends StatefulWidget {
   final VoidCallback onGoToSignUp;
   final void Function(String email, String password) onLogin;
 
+
   const LoginScreen({
     super.key,
     required this.onGoToSignUp,
     required this.onLogin,
   });
+
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -21,6 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+
 
   @override
   void dispose() {
@@ -208,3 +211,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+

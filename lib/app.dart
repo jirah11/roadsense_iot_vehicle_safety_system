@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:roadsense_unang_hirit/backend/firebase_service.dart';
 import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
 import 'package:roadsense_unang_hirit/screens/history_logs_screen.dart';
@@ -16,6 +17,8 @@ import 'screens/signup_screen.dart';
 import 'screens/my_account_screen.dart';
 
 
+
+
 enum AppScreen {
   login,
   signup,
@@ -29,34 +32,44 @@ enum AppScreen {
   myAccount,
 }
 
+
 enum TemperatureUnit { celsius, fahrenheit }
+
 
 enum DistanceUnit { centimeters, inches }
 
+
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
+
 
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
+
 class _AppShellState extends State<AppShell> {
   AppScreen _currentScreen = AppScreen.login;
   bool _isAuthenticated = false; //tinatrack if user ay logged in or nah
+
 
   late VehicleType _vehicleType;
   late String _vehicleNickname;
   late SensorData _sensorData;
   late List<AlertModel> _alerts;
   late bool _iotConnected;
+  late bool _iotPaired;
   late UserInfo _userInfo; //holds profile data
-  late bool _notificationsEnabled;
-  late bool _soundEnabled;
+  bool _notificationsEnabled = true;
+  bool _soundEnabled = true;
+
 
   TemperatureUnit _tempUnit = TemperatureUnit.celsius;
   DistanceUnit _distanceUnit = DistanceUnit.centimeters;
 
+
   Timer? _sensorTimer;
+
 
   @override
   void initState() {
@@ -70,9 +83,13 @@ class _AppShellState extends State<AppShell> {
       timestamp: DateTime.now(),
     );
     _alerts = _initialAlerts();
-    _iotConnected = true;
+    _iotConnected = false;
+    _iotPaired = false;
+    _notificationsEnabled = true;
+    _soundEnabled = true;
     _startSensorSimulation();
   }
+
 
   // placeholder alerts muna ok? recent history siya
   List<AlertModel> _initialAlerts() {
@@ -124,13 +141,13 @@ class _AppShellState extends State<AppShell> {
         final prev = _sensorData;
         _sensorData = SensorData(
           floodLevel:
-              (prev.floodLevel +
-                      (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 3)
-                  .clamp(0.0, 60.0),
+          (prev.floodLevel +
+              (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 3)
+              .clamp(0.0, 60.0),
           temperature:
-              (prev.temperature +
-                      (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 2)
-                  .clamp(20.0, 60.0),
+          (prev.temperature +
+              (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 2)
+              .clamp(20.0, 60.0),
           timestamp: DateTime.now(),
         );
       });
@@ -138,11 +155,14 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+
   // auto-generated yung alerts pag nakalampas sa threshold safety keme
+
 
   void _checkAlerts() {
     final thresholds = VehicleThresholds.forType(_vehicleType);
     final newAlerts = <AlertModel>[];
+
 
     if (_sensorData.floodLevel >= thresholds.floodDanger) {
       newAlerts.add(
@@ -170,6 +190,7 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
+
     if (_sensorData.temperature >= thresholds.tempDanger) {
       newAlerts.add(
         AlertModel(
@@ -196,7 +217,9 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
+
     if (newAlerts.isEmpty) return;
+
 
     setState(() {
       final existingKeys = _alerts
@@ -204,11 +227,12 @@ class _AppShellState extends State<AppShell> {
           .map((a) => '${a.type}-${a.severity}')
           .toSet();
       final toAdd = newAlerts.where(
-        (a) => !existingKeys.contains('${a.type}-${a.severity}'),
+            (a) => !existingKeys.contains('${a.type}-${a.severity}'),
       );
       _alerts = [...toAdd, ..._alerts];
     });
   }
+
 
   @override
   void dispose() {
@@ -216,31 +240,66 @@ class _AppShellState extends State<AppShell> {
     super.dispose();
   }
 
+
   //  Convenience getters
 
+
   VehicleThresholds get _thresholds => VehicleThresholds.forType(_vehicleType);
+
 
   List<AlertModel> get _activeAlerts =>
       _alerts.where((a) => !a.acknowledged).toList();
 
+
   void _goTo(AppScreen screen) => setState(() => _currentScreen = screen);
+
 
   void _onLogin(String email, String password) async {
     try {
-      await FirebaseService.signIn(email: email, password: password);
+      final userCredential = await FirebaseService.signIn(email: email, password: password);
+      final userModel = await FirebaseService.getUserDocument(userCredential.user!.uid);
+      if (userModel != null) {
+        setState(() {
+          _userInfo = UserInfo(
+            firstName: userModel.firstName,
+            middleName: userModel.middleName,
+            lastName: userModel.lastName,    email: userModel.email,
+            phoneNumber: userModel.phoneNumber,
+            createdAt: userModel.createdAt,
+            vehicleType: userModel.vehicleType,
+            vehicleNickname: userModel.vehicleNickname,
+          );
 
-      setState(() {
-        _isAuthenticated = true;
-        _currentScreen = AppScreen.home;
-      });
+          // FIX IS HERE:
+          _vehicleType = vehicleTypeFromString(userModel.vehicleType);
+          _vehicleNickname = userModel.vehicleNickname;
+
+          _isAuthenticated = true;
+          _currentScreen = AppScreen.home;
+        });
+      } else {
+        // Handle case where user document doesn't exist
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User data not found. Please contact support.')),
+          );
+        }
+      }
     } catch (e) {
+      String errorMessage;
+      if (e is firebase_auth.FirebaseAuthException && e.code == 'invalid-credential') {
+        errorMessage = 'Login denied: Your email or password is incorrect.';
+      } else {
+        errorMessage = 'Login failed: ${e.toString()}';
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: ${e.toString()}')),
+          SnackBar(content: Text(errorMessage)),
         );
       }
     }
   }
+
 
   void _onSignUp({
     required String firstName,
@@ -254,9 +313,11 @@ class _AppShellState extends State<AppShell> {
       // Create user in Firebase Auth
       final userCredential = await FirebaseService.signUp(email: email, password: password);
 
+
       // Create user data
       final created = DateTime.now();
       final createdStr = '${_monthName(created.month)} ${created.day}, ${created.year}';
+
 
       final userModel = UserModel(
         uid: userCredential.user!.uid,
@@ -266,10 +327,14 @@ class _AppShellState extends State<AppShell> {
         email: email,
         phoneNumber: phoneNumber,
         createdAt: createdStr,
+        vehicleType: _vehicleType.name,
+        vehicleNickname: _vehicleNickname,
       );
+
 
       // Save user data to Firestore
       await FirebaseService.createUserDocument(userModel);
+
 
       setState(() {
         _userInfo = UserInfo(
@@ -279,6 +344,8 @@ class _AppShellState extends State<AppShell> {
           email: email,
           phoneNumber: phoneNumber,
           createdAt: createdStr,
+          vehicleType: _vehicleType.name,
+          vehicleNickname: _vehicleNickname,
         );
         _isAuthenticated = true;
         _currentScreen = AppScreen.home;
@@ -293,19 +360,35 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+
   String _monthName(int month) {
     const names = ['January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
+      'July', 'August', 'September', 'October', 'November', 'December'];
     return names[month - 1];
   }
+
 
   void _onLogout() {
     setState(() {
       _isAuthenticated = false;
       _currentScreen = AppScreen.login;
       _userInfo = const UserInfo();
+      _iotConnected = false;
+      _iotPaired = false;
     });
   }
+
+
+  void _onConnectIotDevice({
+    required String deviceId,
+    required String password,
+  }) {
+    setState(() {
+      _iotPaired = true;
+      _iotConnected = true;
+    });
+  }
+
 
   void _acknowledgeAlert(String id) {
     setState(() {
@@ -315,22 +398,56 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+
   void _clearAllAlerts() {
     setState(() {
       _alerts = _alerts.map((a) => a.copyWith(acknowledged: true)).toList();
     });
   }
 
-  void _onDeactivateAccount() {
+
+  void _onDeleteAccount() async {
+    final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+
+
+    if (uid != null) {
+      try {
+        await FirebaseService.deleteUserDocument(uid);
+      } catch (_) {
+        // ignore errors while deleting user document
+      }
+    }
+
+
+    var authDeleted = false;
+    try {
+      await FirebaseService.deleteAuthUser();
+      authDeleted = true;
+    } catch (e) {
+      // Deleting the auth user might fail if the user needs to reauthenticate.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Account deletion failed: ${e.toString()}')),
+        );
+      }
+    }
+
+
     _onLogout();
-    if (mounted) {
+
+
+    if (mounted && authDeleted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Your account has been deactivated.')),
+        const SnackBar(content: Text('Your account has been deleted.')),
       );
     }
   }
 
+
   // navigation nung mga cards sa home screen
+
+
+
 
 
 
@@ -361,9 +478,10 @@ class _AppShellState extends State<AppShell> {
                 children: [
                   if (_currentScreen == AppScreen.login)
                     LoginScreen(
-                        onGoToSignUp: () => _goTo(AppScreen.signup),
-                        onLogin: _onLogin,
+                      onGoToSignUp: () => _goTo(AppScreen.signup),
+                      onLogin: _onLogin,
                     ),
+
 
                   if (_currentScreen == AppScreen.signup)
                     SignUpScreen(
@@ -371,14 +489,28 @@ class _AppShellState extends State<AppShell> {
                       onSignUp: _onSignUp,
                     ),
 
+
                   if (_currentScreen == AppScreen.myAccount)
                     MyAccountScreen(
                       userInfo: _userInfo,
                       onBack: () => _goTo(AppScreen.settings),
-                      onUserInfoChanged: (info) => setState(() => _userInfo = info),
+                      onUserInfoChanged: (info) async {
+                        final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+                        if (uid != null) {
+                          await FirebaseService.updateUserDocument(uid, {
+                            'firstName': info.firstName,
+                            'middleName': info.middleName,
+                            'lastName': info.lastName,
+                            'email': info.email,
+                            'phoneNumber': info.phoneNumber,
+                          });
+                        }
+                        setState(() => _userInfo = info);
+                      },
                       onLogout: _onLogout,
-                      onDeactivateAccount: _onDeactivateAccount,
+                      onDeleteAccount: _onDeleteAccount,
                     ),
+
 
                   if (_currentScreen == AppScreen.home)
                     HomeScreen(
@@ -392,6 +524,7 @@ class _AppShellState extends State<AppShell> {
                       onNavigate: _goTo,
                     ),
 
+
                   if (_currentScreen == AppScreen.alerts)
                     AlertsScreen(
                       alerts: _alerts,
@@ -402,70 +535,92 @@ class _AppShellState extends State<AppShell> {
                       onClearAll: _clearAllAlerts,
                     ),
 
+
                   if (_currentScreen == AppScreen.vehicle)
                     VehicleProfileScreen(
-                        vehicleType: _vehicleType,
-                        vehicleNickname: _vehicleNickname,
-                        thresholds: _thresholds,
-                        onBack: () => _goTo(AppScreen.home),
-                        onSave: (type, nickname, thresholds) {
-                          setState(() {
-                            _vehicleType = type;
-                            _vehicleNickname = nickname;
+                      vehicleType: _vehicleType,
+                      vehicleNickname: _vehicleNickname,
+                      thresholds: _thresholds,
+                      onBack: () => _goTo(AppScreen.home),
+                      onSave: (type, nickname, thresholds) async {
+                        setState(() {
+                          _vehicleType = type;
+                          _vehicleNickname = nickname;
+                        });
+
+
+                        final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+                        if (uid != null) {
+                          await FirebaseService.updateUserDocument(uid, {
+                            'vehicleType': type.name,
+                            'vehicleNickname': nickname,
                           });
-                        },
+                        }
+                      },
                     ),
+
 
                   if (_currentScreen == AppScreen.history)
                     HistoryLogsScreen(
-                        alerts: _alerts,
+                      alerts: _alerts,
+                      tempUnit: _tempUnit,
+                      distanceUnit: _distanceUnit,
+                      onBack: () => _goTo(AppScreen.home),
+                    ),
+
+
+                  if (_currentScreen == AppScreen.settings)
+                    Positioned.fill(
+                      child: SettingsScreen(
+                        userInfo: _userInfo,
+                        notificationsEnabled: _notificationsEnabled,
+                        soundEnabled: _soundEnabled,
                         tempUnit: _tempUnit,
                         distanceUnit: _distanceUnit,
                         onBack: () => _goTo(AppScreen.home),
+                        onNotificationsChanged: (v) => setState(() => _notificationsEnabled = v),
+                        onSoundChanged: (v) => setState(() => _soundEnabled = v),
+                        onTempUnitChanged: (u) => setState(() => _tempUnit = u),
+                        onDistanceUnitChanged: (u) => setState(() => _distanceUnit = u),
+                        onUserInfoChanged: (info) => setState(() => _userInfo = info),
+                        onGoToMyAccount: () => _goTo(AppScreen.myAccount),
+                      ),
                     ),
 
-                  if (_currentScreen == AppScreen.settings)
-                    SettingsScreen(
-                      userInfo: _userInfo,
-                      notificationsEnabled: _notificationsEnabled,
-                      soundEnabled: _soundEnabled,
-                      tempUnit: _tempUnit,
-                      distanceUnit: _distanceUnit,
-                      onBack: () => _goTo(AppScreen.home),
-                      onNotificationsChanged: (v) => setState(() => _notificationsEnabled = v),
-                      onSoundChanged: (v) => setState(() => _soundEnabled = v),
-                      onTempUnitChanged: (u) => setState(() => _tempUnit = u),
-                      onDistanceUnitChanged: (u) => setState(() => _distanceUnit = u),
-                      onUserInfoChanged: (info) => setState(() => _userInfo = info),
-                      onGoToMyAccount: () => _goTo(AppScreen.myAccount),
-                    ),
+
 
 
                   if (_currentScreen == AppScreen.iotStatus)
-                    IoTStatusScreen(
-                      iotConnected: _iotConnected,
-                      sensorData: _sensorData,
-                      tempUnit: _tempUnit,
-                      distanceUnit: _distanceUnit,
-                      onBack: () => _goTo(AppScreen.home),
+                    Positioned.fill(
+                      child: IoTStatusScreen(
+                        iotConnected: _iotConnected,
+                        iotPaired: _iotPaired,
+                        sensorData: _sensorData,
+                        tempUnit: _tempUnit,
+                        distanceUnit: _distanceUnit,
+                        onConnectDevice: _onConnectIotDevice,
+                        onBack: () => _goTo(AppScreen.home),
+                      ),
                     ),
+
 
                   if (_currentScreen == AppScreen.help)
                     HelpInfoScreen(onBack: () => _goTo(AppScreen.home),
                     ),
 
+
                   if (_currentScreen != AppScreen.login &&
                       _currentScreen != AppScreen.signup)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: BottomNav(
-                      currentScreen: _currentScreen,
-                      alertCount: _activeAlerts.length,
-                      onNavigate: _goTo,
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: BottomNav(
+                        currentScreen: _currentScreen,
+                        alertCount: _activeAlerts.length,
+                        onNavigate: _goTo,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -476,12 +631,15 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
+
 //pag hinde pa gawa ang screen, ayan muna ang lalabas
 class _PlaceholderScreen extends StatelessWidget {
   final String label;
   final VoidCallback onBack;
 
+
   const _PlaceholderScreen({required this.label, required this.onBack});
+
 
   @override
   Widget build(BuildContext context) {
@@ -524,3 +682,4 @@ class _PlaceholderScreen extends StatelessWidget {
     );
   }
 }
+

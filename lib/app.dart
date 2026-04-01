@@ -50,6 +50,7 @@ class _AppShellState extends State<AppShell> {
   late SensorData _sensorData;
   late List<AlertModel> _alerts;
   late bool _iotConnected;
+  late bool _iotPaired;
   late UserInfo _userInfo; //holds profile data
   bool _notificationsEnabled = true;
   bool _soundEnabled = true;
@@ -71,7 +72,8 @@ class _AppShellState extends State<AppShell> {
       timestamp: DateTime.now(),
     );
     _alerts = _initialAlerts();
-    _iotConnected = true;
+    _iotConnected = false;
+    _iotPaired = false;
     _notificationsEnabled = true;
     _soundEnabled = true;
     _startSensorSimulation();
@@ -338,6 +340,18 @@ class _AppShellState extends State<AppShell> {
       _isAuthenticated = false;
       _currentScreen = AppScreen.login;
       _userInfo = const UserInfo();
+      _iotConnected = false;
+      _iotPaired = false;
+    });
+  }
+
+  void _onConnectIotDevice({
+    required String deviceId,
+    required String password,
+}) {
+    setState(() {
+      _iotPaired = true;
+      _iotConnected = true;
     });
   }
 
@@ -522,12 +536,16 @@ class _AppShellState extends State<AppShell> {
 
 
                   if (_currentScreen == AppScreen.iotStatus)
-                    IoTStatusScreen(
-                      iotConnected: _iotConnected,
-                      sensorData: _sensorData,
-                      tempUnit: _tempUnit,
-                      distanceUnit: _distanceUnit,
-                      onBack: () => _goTo(AppScreen.home),
+                    Positioned.fill(
+                        child: IoTStatusScreen(
+                          iotConnected: _iotConnected,
+                          iotPaired: _iotPaired,
+                          sensorData: _sensorData,
+                          tempUnit: _tempUnit,
+                          distanceUnit: _distanceUnit,
+                          onConnectDevice: _onConnectIotDevice,
+                          onBack: () => _goTo(AppScreen.home),
+                        ),
                     ),
 
                   if (_currentScreen == AppScreen.help)

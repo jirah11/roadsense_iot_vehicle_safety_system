@@ -10,6 +10,7 @@ class HomeScreen extends StatelessWidget {
   final String vehicleNickname;
   final List<AlertModel> activeAlerts;
   final bool iotConnected;
+  final bool iotLive;
   final TemperatureUnit tempUnit;
   final DistanceUnit distanceUnit;
   final ValueChanged<AppScreen> onNavigate;
@@ -21,6 +22,7 @@ class HomeScreen extends StatelessWidget {
     required this.vehicleNickname,
     required this.activeAlerts,
     required this.iotConnected,
+    required this.iotLive,
     required this.tempUnit,
     required this.distanceUnit,
     required this.onNavigate,
@@ -63,103 +65,107 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final floodStatus = _floodStatus();
-    final tempStatus = _tempStatus();
+    final floodStatus = iotLive ? _floodStatus() : '—';
+    final tempStatus = iotLive ? _tempStatus() : '—';
 
     // convert display units
     final bool useInches = distanceUnit == DistanceUnit.inches;
     final bool useFahrenheit = tempUnit == TemperatureUnit.fahrenheit;
 
-    final double displayFlood = useInches
-        ? sensorData.floodLevel / 2.54
-        : sensorData.floodLevel;
+    //chinecheck if live yung iot kasi if disconnected, iba makikita
+    final double displayFlood = iotLive
+        ? (useInches ? sensorData.floodLevel / 2.54 : sensorData.floodLevel)
+        : 0;
     final String floodUnit = useInches ? 'in' : 'cm';
 
-    final double displayTemp = useFahrenheit
+    final double displayTemp = iotLive
+        ? (useFahrenheit
         ? sensorData.temperature * 9 / 5 + 32
-        : sensorData.temperature;
+        : sensorData.temperature)
+        : 0;
     final String tempUnitLabel = useFahrenheit ? '°F' : '°C';
 
     // threshold labels
-    final String floodCautionLabel = useInches
-        ? 'Caution: ${(thresholds.floodCaution / 2.54).toStringAsFixed(1)}in'
-        : 'Caution: ${thresholds.floodCaution}cm';
-    final String floodDangerLabel = useInches
-        ? 'Danger: ${(thresholds.floodDanger / 2.54).toStringAsFixed(1)}in'
-        : 'Danger: ${thresholds.floodDanger}cm';
+    String floodCautionLabel;
+    String floodDangerLabel;
+    if (useInches) {
+      floodCautionLabel =
+      'Caution: ${(thresholds.floodCaution / 2.54).toStringAsFixed(1)}in';
+      floodDangerLabel =
+      'Danger: ${(thresholds.floodDanger / 2.54).toStringAsFixed(1)}in';
+    } else {
+      floodCautionLabel = 'Caution: ${thresholds.floodCaution}cm';
+      floodDangerLabel = 'Danger: ${thresholds.floodDanger}cm';
+    }
 
-    final String tempCautionLabel = useFahrenheit
-        ? 'Caution: ${(thresholds.tempCaution * 9 / 5 + 32).toStringAsFixed(1)}°F'
-        : 'Caution: ${thresholds.tempCaution}°C';
-    final String tempDangerLabel = useFahrenheit
-        ? 'Danger: ${(thresholds.tempDanger * 9 / 5 + 32).toStringAsFixed(1)}°F'
-        : 'Danger: ${thresholds.tempDanger}°C';
+    String tempCautionLabel;
+    String tempDangerLabel;
+    if (useFahrenheit) {
+      tempCautionLabel =
+      'Caution: ${(thresholds.tempCaution * 9 / 5 + 32).toStringAsFixed(1)}°F';
+      tempDangerLabel =
+      'Danger: ${(thresholds.tempDanger * 9 / 5 + 32).toStringAsFixed(1)}°F';
+    } else {
+      tempCautionLabel = 'Caution: ${thresholds.tempCaution}°C';
+      tempDangerLabel = 'Danger: ${thresholds.tempDanger}°C';
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'RoadSense',
-                    style: GoogleFonts.inter(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    'Vehicle Safety Monitor',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: AppColors.accent,
-                    ),
-                  ),
+                  Text('RoadSense', style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text('Vehicle Safety Monitor', style: GoogleFonts.inter(fontSize: 14, color: AppColors.accent)),
                 ],
               ),
               Row(
                 children: [
-                  // Green or red dot sa IoT connection status wow
                   Container(
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
                       color: iotConnected ? AppColors.emerald : AppColors.rose,
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color:
-                              (iotConnected
-                                      ? AppColors.emerald
-                                      : AppColors.rose)
-                                  .withValues(alpha: 0.6),
-                          blurRadius: 6,
-                        ),
-                      ],
+                      boxShadow: [BoxShadow(color: (iotConnected ? AppColors.emerald : AppColors.rose).withValues(alpha: 0.6), blurRadius: 6)],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    iotConnected ? 'Connected' : 'Offline',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: AppColors.accent,
-                    ),
-                  ),
+                  Text(iotConnected ? 'Connected' : 'Offline', style: GoogleFonts.inter(fontSize: 12, color: AppColors.accent)),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 24),
-
-          //active alerts banner, lilitaw lang siya if may alert
+          if (!iotLive)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.cardDark.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.wifi_off, color: AppColors.accent, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'IoT device is not connected yet. Connect from IoT Status to see live readings and alerts.',
+                      style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (!iotLive) const SizedBox(height: 24),
           if (activeAlerts.isNotEmpty)
             GestureDetector(
               onTap: () => onNavigate(AppScreen.alerts),
@@ -170,75 +176,36 @@ class HomeScreen extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [
-                      AppColors.rose.withValues(alpha: 0.5),
-                      AppColors.roseDark.withValues(alpha: 0.5),
-                    ],
+                    colors: [AppColors.rose.withValues(alpha: 0.5), AppColors.roseDark.withValues(alpha: 0.5)],
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.rose.withValues(alpha: 0.3),
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black26,
-                      blurRadius: 12,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
+                  border: Border.all(color: AppColors.rose.withValues(alpha: 0.3)),
+                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12, offset: const Offset(0, 4))],
                 ),
                 child: Row(
                   children: [
                     Container(
                       width: 40,
                       height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.rose,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
+                      decoration: BoxDecoration(color: AppColors.rose, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 22),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '${activeAlerts.length} Active Alert${activeAlerts.length > 1 ? 's' : ''}',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                          Text(
-                            'Tap to view details',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: Colors.white70,
-                            ),
-                          ),
+                          Text('${activeAlerts.length} Active Alert${activeAlerts.length > 1 ? 's' : ''}', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: Colors.white)),
+                          Text('Tap to view details', style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
                         ],
                       ),
                     ),
-                    Text(
-                      'View',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.rose,
-                      ),
-                    ),
+                    Text('View', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.rose)),
                   ],
                 ),
               ),
             ),
           if (activeAlerts.isNotEmpty) const SizedBox(height: 24),
-
-          //  sensor cards
           Row(
             children: [
               Expanded(
@@ -247,8 +214,8 @@ class HomeScreen extends StatelessWidget {
                   value: displayFlood.toStringAsFixed(1),
                   unit: floodUnit,
                   status: floodStatus,
-                  statusColor: _statusColor(floodStatus),
-                  progress: _floodPercent(),
+                  statusColor: iotLive ? _statusColor(_floodStatus()) : Colors.white38,
+                  progress: iotLive ? _floodPercent() : 0,
                   cautionLabel: floodCautionLabel,
                   dangerLabel: floodDangerLabel,
                   icon: Icons.water_drop,
@@ -261,8 +228,8 @@ class HomeScreen extends StatelessWidget {
                   value: displayTemp.toStringAsFixed(1),
                   unit: tempUnitLabel,
                   status: tempStatus,
-                  statusColor: _statusColor(tempStatus),
-                  progress: _tempPercent(),
+                  statusColor: iotLive ? _statusColor(_tempStatus()) : Colors.white38,
+                  progress: iotLive ? _tempPercent() : 0,
                   cautionLabel: tempCautionLabel,
                   dangerLabel: tempDangerLabel,
                   icon: Icons.thermostat,
@@ -271,63 +238,29 @@ class HomeScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
-
           Center(
             child: Text(
-              'Last updated: ${_lastUpdated()}',
+              iotLive ? 'Last updated: ${_lastUpdated()}' : 'Last updated: —',
               style: GoogleFonts.inter(fontSize: 12, color: Colors.white38),
             ),
           ),
           const SizedBox(height: 24),
-
-          //  navigation shortcut cards dun sa homescreen
           Row(
             children: [
-              Expanded(
-                child: _NavCard(
-                  title: 'Alerts',
-                  subtitle: 'View warnings',
-                  icon: Icons.warning_amber_rounded,
-                  badge: activeAlerts.length,
-                  onTap: () => onNavigate(AppScreen.alerts),
-                ),
-              ),
+              Expanded(child: _NavCard(title: 'Alerts', subtitle: 'View warnings', icon: Icons.warning_amber_rounded, badge: activeAlerts.length, onTap: () => onNavigate(AppScreen.alerts))),
               const SizedBox(width: 16),
-              Expanded(
-                child: _NavCard(
-                  title: 'Vehicle',
-                  subtitle: 'Profile settings',
-                  icon: Icons.directions_car,
-                  onTap: () => onNavigate(AppScreen.vehicle),
-                ),
-              ),
+              Expanded(child: _NavCard(title: 'Vehicle', subtitle: 'Profile settings', icon: Icons.directions_car, onTap: () => onNavigate(AppScreen.vehicle))),
             ],
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(
-                child: _NavCard(
-                  title: 'History',
-                  subtitle: 'Past alerts',
-                  icon: Icons.history,
-                  onTap: () => onNavigate(AppScreen.history),
-                ),
-              ),
+              Expanded(child: _NavCard(title: 'History', subtitle: 'Past alerts', icon: Icons.history, onTap: () => onNavigate(AppScreen.history))),
               const SizedBox(width: 16),
-              Expanded(
-                child: _NavCard(
-                  title: 'IoT Status',
-                  subtitle: 'Device info',
-                  icon: Icons.wifi,
-                  onTap: () => onNavigate(AppScreen.iotStatus),
-                ),
-              ),
+              Expanded(child: _NavCard(title: 'IoT Status', subtitle: 'Device info', icon: Icons.wifi, onTap: () => onNavigate(AppScreen.iotStatus))),
             ],
           ),
           const SizedBox(height: 24),
-
-          // help button
           GestureDetector(
             onTap: () => onNavigate(AppScreen.help),
             child: Container(
@@ -341,14 +274,7 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   Icon(Icons.help_outline, color: AppColors.accent, size: 22),
                   const SizedBox(height: 8),
-                  Text(
-                    'Help & Info',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                  ),
+                  Text('Help & Info', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white)),
                 ],
               ),
             ),
@@ -359,7 +285,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// sensor cards
+// sensor cards, yung nakukuha from iot device dito magdidisplay
 
 class _SensorCard extends StatelessWidget {
   final String title;
@@ -386,121 +312,85 @@ class _SensorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.cardDark, AppColors.cardDarker],
+    return AspectRatio(
+      aspectRatio: 1,
+      child: Container(
+        padding: const EdgeInsets.all(14), // was 20
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [AppColors.cardDark, AppColors.cardDarker],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12, offset: const Offset(0, 4))],
         ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 12,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize:
-            MainAxisSize.min, // shrink-wraps to content, shrinks?!?!?!
-        children: [
-          // icon + status badge row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: Colors.white, size: 20),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  status,
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: Icon(icon, color: Colors.white, size: 18),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Label
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(status,
+                      style: GoogleFonts.inter(
+                          fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: RichText(
-              text: TextSpan(
+            const Spacer(),
+            Text(title,
                 style: GoogleFonts.inter(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                    fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+            const SizedBox(height: 8),
+            Center(
+              child: RichText(
+                text: TextSpan(
+                  style: GoogleFonts.inter(
+                      fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white), // was 32
+                  children: [
+                    TextSpan(text: value),
+                    TextSpan(text: unit, style: GoogleFonts.inter(fontSize: 28)), // was 18
+                  ],
                 ),
-                children: [
-                  TextSpan(text: value),
-                  TextSpan(text: unit, style: GoogleFonts.inter(fontSize: 18)),
-                ],
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-
-          // progress bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
-              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-              minHeight: 8,
+            const SizedBox(height: 12), // was 8
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+                minHeight: 6, // was 8
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-
-          // caution / danger threshold labels
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text(
-                  cautionLabel,
-                  style: GoogleFonts.inter(fontSize: 9, color: Colors.white38),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Flexible(
-                child: Text(
-                  dangerLabel,
-                  style: GoogleFonts.inter(fontSize: 9, color: Colors.white38),
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.end,
-                ),
-              ),
-            ],
-          ),
-        ],
+            const SizedBox(height: 4), // was 8
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(cautionLabel,
+                    style: GoogleFonts.inter(fontSize: 9, color: Colors.white38)), // was 10
+                Text(dangerLabel,
+                    style: GoogleFonts.inter(fontSize: 9, color: Colors.white38)), // was 10
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

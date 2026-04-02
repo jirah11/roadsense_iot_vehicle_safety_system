@@ -304,7 +304,7 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
           ]),
           _thresholdSection(
             title: 'Flood Threshold',
-            subtitle: 'Flood threshold description',
+            subtitle: 'Set flood level triggers',
             icon: Icons.water_drop,
             caution: _floodCaution,
             danger: _floodDanger,
@@ -318,7 +318,7 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
           ),
           _thresholdSection(
             title: 'Temperature Threshold',
-            subtitle: 'Temperature threshold description',
+            subtitle: 'Set temperature triggers',
             icon: Icons.thermostat,
             caution: _tempCaution,
             danger: _tempDanger,
@@ -630,7 +630,7 @@ class _VehicleProfileScreenState extends State<VehicleProfileScreen> {
                       Text(
                         subtitle,
                         style: GoogleFonts.inter(
-                          fontSize: 14,
+                          fontSize: 10,
                           color: Colors.white60,
                         ),
                       ),

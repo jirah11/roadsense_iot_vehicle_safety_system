@@ -13,6 +13,7 @@ class IoTStatusScreen extends StatefulWidget {
   final DistanceUnit distanceUnit;
   final void Function({required String deviceId, required String password})
   onConnectDevice;
+  final VoidCallback onDisconnect;
   final VoidCallback onBack;
 
   const IoTStatusScreen({
@@ -23,6 +24,7 @@ class IoTStatusScreen extends StatefulWidget {
     required this.tempUnit,
     required this.distanceUnit,
     required this.onConnectDevice,
+    required this.onDisconnect,
     required this.onBack,
   });
 
@@ -32,7 +34,7 @@ class IoTStatusScreen extends StatefulWidget {
 
 class _IoTStatusScreenState extends State<IoTStatusScreen> {
   bool _didPrompt = false;
-  bool _obscurePassword = true;
+  final bool _obscurePassword = true;
   final TextEditingController _deviceIdCtrl = TextEditingController(
     text: 'RoadSense-IoT',
   );
@@ -265,6 +267,25 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
           ),
           const SizedBox(height: 16),
           if (widget.iotPaired) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: _openDisconnectConfirm,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.rose,
+                  side: const BorderSide(color: AppColors.rose),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: Text(
+                  'Disconnect device',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             _progressCard(
               'Signal Strength',
               'Network connection quality',
@@ -372,11 +393,11 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
     return '${value.toStringAsFixed(1)} $unit';
   }
 
-  Future<void> _openConnectDeviceModal() async {
-    await showDialog<void>(
+  Future<void> _openDisconnectConfirm() async {
+    final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: true,
-      builder: (context) {
+      builder: (dialogContext) {
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 24),
@@ -406,107 +427,35 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Connect Device',
+                        'Disconnect device?',
                         style: GoogleFonts.inter(
-                          fontSize: 24,
+                          fontSize: 22,
                           fontWeight: FontWeight.w800,
                           color: Colors.white,
                         ),
                       ),
                     ),
                     IconButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => Navigator.pop(dialogContext, false),
                       icon: const Icon(Icons.close, color: Colors.white54),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 Text(
-                  'Device ID',
-                  style: GoogleFonts.inter(color: Colors.white70),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _deviceIdCtrl,
-                  style: GoogleFonts.inter(color: Colors.white),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.06),
-                    hintText: 'RoadSense-IoT',
-                    hintStyle: GoogleFonts.inter(color: Colors.white38),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.16),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(
-                        color: AppColors.accent,
-                        width: 2,
-                      ),
-                    ),
+                  'Your IoT device will be disconnected. Live sensor data and alerts will stop until you connect again.',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: Colors.white70,
+                    height: 1.4,
                   ),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Password',
-                  style: GoogleFonts.inter(color: Colors.white70),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _passwordCtrl,
-                  obscureText: _obscurePassword,
-                  style: GoogleFonts.inter(color: Colors.white),
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.06),
-                    hintText: 'Enter WiFi password',
-                    hintStyle: GoogleFonts.inter(color: Colors.white38),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.16),
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(
-                        color: AppColors.accent,
-                        width: 2,
-                      ),
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: Colors.white60,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () => Navigator.pop(dialogContext, false),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white.withValues(alpha: 0.10),
                           foregroundColor: Colors.white,
@@ -525,18 +474,9 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                     const SizedBox(width: 14),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () {
-                          widget.onConnectDevice(
-                            deviceId: _deviceIdCtrl.text.trim(),
-                            password: _passwordCtrl.text,
-                          );
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Device connected')),
-                          );
-                        },
+                        onPressed: () => Navigator.pop(dialogContext, true),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.emerald,
+                          backgroundColor: AppColors.rose,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -544,7 +484,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                           ),
                         ),
                         child: Text(
-                          'Connect',
+                          'Disconnect',
                           style: GoogleFonts.inter(fontWeight: FontWeight.w700),
                         ),
                       ),
@@ -554,6 +494,219 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
               ],
             ),
           ),
+        );
+      },
+    );
+    if (confirmed == true && mounted) {
+      widget.onDisconnect();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('IoT device disconnected')));
+    }
+  }
+
+  Future<void> _openConnectDeviceModal() async {
+    var obscurePassword = true;
+    final messenger = ScaffoldMessenger.of(context);
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF2B3E54), Color(0xFF213448)],
+                  ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black54,
+                      blurRadius: 30,
+                      offset: Offset(0, 18),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Connect Device',
+                            style: GoogleFonts.inter(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          icon: const Icon(Icons.close, color: Colors.white54),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Device ID',
+                      style: GoogleFonts.inter(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _deviceIdCtrl,
+                      style: GoogleFonts.inter(color: Colors.white),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.06),
+                        hintText: 'RoadSense-IoT',
+                        hintStyle: GoogleFonts.inter(color: Colors.white38),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.16),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(
+                            color: AppColors.accent,
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Password',
+                      style: GoogleFonts.inter(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _passwordCtrl,
+                      obscureText: obscurePassword,
+                      style: GoogleFonts.inter(color: Colors.white),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.06),
+                        hintText: 'Enter WiFi password',
+                        hintStyle: GoogleFonts.inter(color: Colors.white38),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.16),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(
+                            color: AppColors.accent,
+                            width: 2,
+                          ),
+                        ),
+                        suffixIcon: IconButton(
+                          onPressed: () => setModalState(
+                                () => obscurePassword = !obscurePassword,
+                          ),
+                          icon: Icon(
+                            obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.10,
+                              ),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: Text(
+                              'Cancel',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              widget.onConnectDevice(
+                                deviceId: _deviceIdCtrl.text.trim(),
+                                password: _passwordCtrl.text,
+                              );
+                              Navigator.pop(dialogContext);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (!mounted) return;
+                                messenger.showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Device connected'),
+                                  ),
+                                );
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.emerald,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text(
+                              'Connect',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );

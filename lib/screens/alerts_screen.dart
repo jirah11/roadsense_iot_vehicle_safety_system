@@ -7,6 +7,7 @@ import '../models/models.dart';
 //mga pang-call YEHEY I AM GOING INSANE
 class AlertsScreen extends StatelessWidget {
   final List<AlertModel> alerts;
+  final bool iotLive;
   final VoidCallback onBack;
   final void Function(String id) onAcknowledge;
   final VoidCallback onClearAll;
@@ -16,6 +17,7 @@ class AlertsScreen extends StatelessWidget {
   const AlertsScreen({
     super.key,
     required this.alerts,
+    required this.iotLive,
     required this.onBack,
     required this.onAcknowledge,
     required this.onClearAll,
@@ -42,6 +44,88 @@ class AlertsScreen extends StatelessWidget {
   //container ng alert cards, mga status banners din caution and danger + the active alert ewan ko teh andiyan naman na siya
   @override
   Widget build(BuildContext context) {
+    if (!iotLive) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  onPressed: onBack,
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.3),
+                  ),
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Alerts',
+                      style: GoogleFonts.inter(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'Safety notifications',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: AppColors.accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.cardDark, AppColors.cardDarker],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.wifi_off, color: AppColors.accent, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    'IoT device not connected',
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Connect your RoadSense IoT device from IoT Status to receive flood and temperature alerts here.',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: Colors.white60,
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
       child: Column(
@@ -215,7 +299,7 @@ class AlertsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             ...activeAlerts.map(
-              (a) => _AlertCard(
+                  (a) => _AlertCard(
                 alert: a,
                 isActive: true,
                 formatTime: _formatTime,
@@ -240,14 +324,14 @@ class AlertsScreen extends StatelessWidget {
                 .take(5)
                 .map(
                   (a) => _AlertCard(
-                    alert: a,
-                    isActive: false,
-                    formatTime: _formatTime,
-                    onAcknowledge: onAcknowledge,
-                    tempUnit: tempUnit,
-                    distanceUnit: distanceUnit,
-                  ),
-                ),
+                alert: a,
+                isActive: false,
+                formatTime: _formatTime,
+                onAcknowledge: onAcknowledge,
+                tempUnit: tempUnit,
+                distanceUnit: distanceUnit,
+              ),
+            ),
           ],
           if (alerts.isEmpty)
             Center(

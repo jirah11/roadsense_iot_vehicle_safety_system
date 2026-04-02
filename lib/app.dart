@@ -15,6 +15,7 @@ import 'screens/iot_status_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/my_account_screen.dart';
+import "package:shared_preferences/shared_preferences.dart";
 
 
 
@@ -78,11 +79,11 @@ class _AppShellState extends State<AppShell> {
     _vehicleType = VehicleType.sedan;
     _vehicleNickname = 'My Vehicle';
     _sensorData = SensorData(
-      floodLevel: 12,
-      temperature: 35,
+      floodLevel: 0,
+      temperature: 0,
       timestamp: DateTime.now(),
     );
-    _alerts = _initialAlerts();
+    _alerts = [];
     _iotConnected = false;
     _iotPaired = false;
     _notificationsEnabled = true;
@@ -90,6 +91,17 @@ class _AppShellState extends State<AppShell> {
     _startSensorSimulation();
   }
 
+  Future<bool> _hasSeenOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('roadsense_hasSeenOnboarding') ?? false;
+  }
+
+  Future<void> _markOnboardingSeen() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('roadsense_hasSeenOnboarding', true);
+  }
+
+  bool get _iotLive => _iotPaired && _iotConnected;
 
   // placeholder alerts muna ok? recent history siya
   List<AlertModel> _initialAlerts() {
@@ -138,6 +150,14 @@ class _AppShellState extends State<AppShell> {
     _sensorTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!mounted) return;
       setState(() {
+        if (!_iotLive) {
+          _sensorData = SensorData(
+            floodLevel: 0,
+            temperature: 0,
+            timestamp: DateTime.now(),
+          );
+          return;
+        }
         final prev = _sensorData;
         _sensorData = SensorData(
           floodLevel:
@@ -160,9 +180,9 @@ class _AppShellState extends State<AppShell> {
 
 
   void _checkAlerts() {
+    if (!_iotLive) return;
     final thresholds = VehicleThresholds.forType(_vehicleType);
     final newAlerts = <AlertModel>[];
-
 
     if (_sensorData.floodLevel >= thresholds.floodDanger) {
       newAlerts.add(
@@ -190,7 +210,6 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
-
     if (_sensorData.temperature >= thresholds.tempDanger) {
       newAlerts.add(
         AlertModel(
@@ -217,9 +236,7 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
-
     if (newAlerts.isEmpty) return;
-
 
     setState(() {
       final existingKeys = _alerts
@@ -248,7 +265,7 @@ class _AppShellState extends State<AppShell> {
 
 
   List<AlertModel> get _activeAlerts =>
-      _alerts.where((a) => !a.acknowledged).toList();
+      _iotLive ? _alerts.where((a) => !a.acknowledged).toList() : [];
 
 
   void _goTo(AppScreen screen) => setState(() => _currentScreen = screen);
@@ -362,8 +379,20 @@ class _AppShellState extends State<AppShell> {
 
 
   String _monthName(int month) {
-    const names = ['January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'];
+    const names = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
     return names[month - 1];
   }
 
@@ -378,7 +407,6 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-
   void _onConnectIotDevice({
     required String deviceId,
     required String password,
@@ -386,9 +414,26 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _iotPaired = true;
       _iotConnected = true;
+      _sensorData = SensorData(
+        floodLevel: 12,
+        temperature: 35,
+        timestamp: DateTime.now(),
+      );
     });
   }
 
+  void _onDisconnectIotDevice() {
+    setState(() {
+      _iotPaired = false;
+      _iotConnected = false;
+      _alerts = [];
+      _sensorData = SensorData(
+        floodLevel: 0,
+        temperature: 0,
+        timestamp: DateTime.now(),
+      );
+    });
+  }
 
   void _acknowledgeAlert(String id) {
     setState(() {
@@ -397,7 +442,6 @@ class _AppShellState extends State<AppShell> {
           .toList();
     });
   }
-
 
   void _clearAllAlerts() {
     setState(() {
@@ -519,6 +563,7 @@ class _AppShellState extends State<AppShell> {
                       vehicleNickname: _vehicleNickname,
                       activeAlerts: _activeAlerts,
                       iotConnected: _iotConnected,
+                      iotLive: _iotLive,
                       tempUnit: _tempUnit,
                       distanceUnit: _distanceUnit,
                       onNavigate: _goTo,
@@ -526,46 +571,53 @@ class _AppShellState extends State<AppShell> {
 
 
                   if (_currentScreen == AppScreen.alerts)
-                    AlertsScreen(
-                      alerts: _alerts,
-                      tempUnit: _tempUnit,
-                      distanceUnit: _distanceUnit,
-                      onBack: () => _goTo(AppScreen.home),
-                      onAcknowledge: _acknowledgeAlert,
-                      onClearAll: _clearAllAlerts,
+                    Positioned.fill(
+                        child: AlertsScreen(
+                          alerts: _alerts,
+                          iotLive: _iotLive,
+                          tempUnit: _tempUnit,
+                          distanceUnit: _distanceUnit,
+                          onBack: () => _goTo(AppScreen.home),
+                          onAcknowledge: _acknowledgeAlert,
+                          onClearAll: _clearAllAlerts,
+                        ),
                     ),
 
 
                   if (_currentScreen == AppScreen.vehicle)
-                    VehicleProfileScreen(
-                      vehicleType: _vehicleType,
-                      vehicleNickname: _vehicleNickname,
-                      thresholds: _thresholds,
-                      onBack: () => _goTo(AppScreen.home),
-                      onSave: (type, nickname, thresholds) async {
-                        setState(() {
-                          _vehicleType = type;
-                          _vehicleNickname = nickname;
-                        });
+                    Positioned.fill(
+                        child: VehicleProfileScreen(
+                          vehicleType: _vehicleType,
+                          vehicleNickname: _vehicleNickname,
+                          thresholds: _thresholds,
+                          onBack: () => _goTo(AppScreen.home),
+                          onSave: (type, nickname, thresholds) async {
+                            setState(() {
+                              _vehicleType = type;
+                              _vehicleNickname = nickname;
+                            });
 
 
-                        final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
-                        if (uid != null) {
-                          await FirebaseService.updateUserDocument(uid, {
-                            'vehicleType': type.name,
-                            'vehicleNickname': nickname,
-                          });
-                        }
-                      },
+                            final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+                            if (uid != null) {
+                              await FirebaseService.updateUserDocument(uid, {
+                                'vehicleType': type.name,
+                                'vehicleNickname': nickname,
+                              });
+                            }
+                          },
+                        ),
                     ),
 
 
                   if (_currentScreen == AppScreen.history)
-                    HistoryLogsScreen(
-                      alerts: _alerts,
-                      tempUnit: _tempUnit,
-                      distanceUnit: _distanceUnit,
-                      onBack: () => _goTo(AppScreen.home),
+                    Positioned.fill(
+                        child: HistoryLogsScreen(
+                          alerts: _alerts,
+                          tempUnit: _tempUnit,
+                          distanceUnit: _distanceUnit,
+                          onBack: () => _goTo(AppScreen.home),
+                        ),
                     ),
 
 
@@ -599,6 +651,7 @@ class _AppShellState extends State<AppShell> {
                         tempUnit: _tempUnit,
                         distanceUnit: _distanceUnit,
                         onConnectDevice: _onConnectIotDevice,
+                        onDisconnect: _onDisconnectIotDevice,
                         onBack: () => _goTo(AppScreen.home),
                       ),
                     ),

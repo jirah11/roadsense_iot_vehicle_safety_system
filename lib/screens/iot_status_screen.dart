@@ -6,11 +6,12 @@ import '../models/sensor_data.dart';
 
 //mga pang-call if kunware, gusto mo siya ipunta sa screen, ganto ok?
 class IoTStatusScreen extends StatefulWidget {
-  final bool iotConnected;
-  final bool iotPaired;
+  final bool iotConnected; //nagsend ba ng data yung device currently?
+  final bool iotPaired; //nagsave ba sa profile ng user?
   final SensorData? sensorData;
   final TemperatureUnit tempUnit;
   final DistanceUnit distanceUnit;
+  //callback para matrigger yung connection logic sa app.dart
   final void Function({required String deviceId, required String password})
   onConnectDevice;
   final VoidCallback onDisconnect;
@@ -33,8 +34,11 @@ class IoTStatusScreen extends StatefulWidget {
 }
 
 class _IoTStatusScreenState extends State<IoTStatusScreen> {
+  //ensures connection modal and magpapop up once automatic
   bool _didPrompt = false;
   final bool _obscurePassword = true;
+
+  //controller sa connection dialog text fields
   final TextEditingController _deviceIdCtrl = TextEditingController(
     text: 'RoadSense-IoT',
   );
@@ -60,6 +64,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
   //placeholder lang siya, information kunware ng iot device
   @override
   Widget build(BuildContext context) {
+    //if yung device di pa paired, automatic magoopen yung connect modal
     if (!_didPrompt && !widget.iotPaired) {
       _didPrompt = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -18,6 +18,8 @@ import 'screens/my_account_screen.dart';
 import 'screens/launch_screen.dart';
 import 'screens/onboarding_screen.dart';
 import "package:shared_preferences/shared_preferences.dart";
+import 'package:provider/provider.dart';
+import 'backend/controller/user.dart';
 
 //--ENUMS--
 enum AppScreen {
@@ -36,6 +38,7 @@ enum AppScreen {
 }
 
 enum TemperatureUnit { celsius, fahrenheit }
+
 enum DistanceUnit { centimeters, inches }
 
 class AppShell extends StatefulWidget {
@@ -48,7 +51,6 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   // - - 1. NAVIGATION + AUTH STATE - -
   AppScreen _currentScreen = AppScreen.launch;
-  bool _isAuthenticated = false; //tinatrack if user ay logged in or nah
   AppScreen _myAccountReturnTo = AppScreen.settings;
 
   // - - 2. VEHICLE + USER DATA - -
@@ -87,10 +89,22 @@ class _AppShellState extends State<AppShell> {
     _notificationsEnabled = true;
     _soundEnabled = true;
     _startSensorSimulation(); //3 sec loop
+
+    // ✅ FIX: AUTO LOAD USER IF ALREADY LOGGED IN
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final userController = context.read<UserController>();
+
+      if (userController.isAuthenticated) {
+        print("🔄 AUTO-LOADING USER ON APP START...");
+        // await userController.refreshUser();
+        print("✅ USER LOADED: ${userController.userModel}");
+      }
+    });
   }
 
   @override
-  void dispose() { //cancel timer para iwas memory leaks
+  void dispose() {
+    //cancel timer para iwas memory leaks
     _sensorTimer?.cancel();
     super.dispose();
   }
@@ -99,160 +113,15 @@ class _AppShellState extends State<AppShell> {
   void _goTo(AppScreen screen) => setState(() => _currentScreen = screen);
 
   void _goToMyAccount({required AppScreen returnTo}) {
+    final userController = context.read<UserController>();
+
+    userController.refreshUser(); // 🔥 THIS LINE FIXES YOUR PROBLEM
+
     setState(() {
       _myAccountReturnTo = returnTo;
       _currentScreen = AppScreen.myAccount;
     });
   }
-
-  // - - 7. FIREBASE AUTH LOGIC - -
-
-  //firebase sign-in, fetching user prof galing firestore
-  void _onLogin(String email, String password) async {
-    try {
-      final userCredential = await FirebaseService.signIn(email: email, password: password);
-      final userModel = await FirebaseService.getUserDocument(userCredential.user!.uid);
-      if (userModel != null) {
-        setState(() {
-          _userInfo = UserInfo(
-            firstName: userModel.firstName,
-            middleName: userModel.middleName,
-            lastName: userModel.lastName,    email: userModel.email,
-            phoneNumber: userModel.phoneNumber,
-            createdAt: userModel.createdAt,
-            vehicleType: userModel.vehicleType,
-            vehicleNickname: userModel.vehicleNickname,
-          );
-          _vehicleType = vehicleTypeFromString(userModel.vehicleType);
-          _vehicleNickname = userModel.vehicleNickname;
-
-          _isAuthenticated = true;
-          _currentScreen = AppScreen.home;
-        });
-      } else {
-        // Handle case where user document doesn't exist
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('User data not found. Please contact support.')),
-          );
-        }
-      }
-    } catch (e) {
-      String errorMessage;
-      if (e is firebase_auth.FirebaseAuthException && e.code == 'invalid-credential') {
-        errorMessage = 'Login denied: Your email or password is incorrect.';
-      } else {
-        errorMessage = 'Login failed: ${e.toString()}';
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
-        );
-      }
-    }
-  }
-
-  //firebase sign-up create ng bagong firestore docu
-  void _onSignUp({
-    required String firstName,
-    required String middleName,
-    required String lastName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-  }) async {
-    try {
-      // Create user in Firebase Auth
-      final userCredential = await FirebaseService.signUp(email: email, password: password);
-
-      // Create user data
-      final created = DateTime.now();
-      final createdStr = '${_monthName(created.month)} ${created.day}, ${created.year}';
-
-      final userModel = UserModel(
-        uid: userCredential.user!.uid,
-        firstName: firstName,
-        middleName: middleName,
-        lastName: lastName,
-        email: email,
-        phoneNumber: phoneNumber,
-        createdAt: createdStr,
-        vehicleType: _vehicleType.name,
-        vehicleNickname: _vehicleNickname,
-      );
-
-      // Save user data to Firestore
-      await FirebaseService.createUserDocument(userModel);
-
-      setState(() {
-        _userInfo = UserInfo(
-          firstName: firstName,
-          middleName: middleName,
-          lastName: lastName,
-          email: email,
-          phoneNumber: phoneNumber,
-          createdAt: createdStr,
-          vehicleType: _vehicleType.name,
-          vehicleNickname: _vehicleNickname,
-        );
-        _isAuthenticated = true;
-        _currentScreen = AppScreen.home;
-      });
-    } catch (e) {
-      // Handle signup errors, e.g., show a snackbar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Signup failed: ${e.toString()}')),
-        );
-      }
-    }
-  }
-
-  //resets local state pag naglogout
-  void _onLogout() {
-    setState(() {
-      _isAuthenticated = false;
-      _currentScreen = AppScreen.login;
-      _userInfo = const UserInfo();
-      _iotConnected = false;
-      _iotPaired = false;
-    });
-  }
-
-  //removes user from auth tapos firestore
-  void _onDeleteAccount() async {
-    final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
-
-    if (uid != null) {
-      try {
-        await FirebaseService.deleteUserDocument(uid);
-      } catch (_) {
-        // ignore errors while deleting user document
-      }
-    }
-
-    var authDeleted = false;
-    try {
-      await FirebaseService.deleteAuthUser();
-      authDeleted = true;
-    } catch (e) {
-      // Deleting the auth user might fail if the user needs to reauthenticate.
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Account deletion failed: ${e.toString()}')),
-        );
-      }
-    }
-
-    _onLogout();
-
-    if (mounted && authDeleted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Your account has been deleted.')),
-      );
-    }
-  }
-
 
   // - - 8. IOT + SENSOR LOGIC - -
   //check if nagfoflow data
@@ -275,13 +144,13 @@ class _AppShellState extends State<AppShell> {
         final prev = _sensorData;
         _sensorData = SensorData(
           floodLevel:
-          (prev.floodLevel +
-              (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 3)
-              .clamp(0.0, 60.0),
+              (prev.floodLevel +
+                      (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 3)
+                  .clamp(0.0, 60.0),
           temperature:
-          (prev.temperature +
-              (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 2)
-              .clamp(20.0, 60.0),
+              (prev.temperature +
+                      (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 2)
+                  .clamp(20.0, 60.0),
           timestamp: DateTime.now(),
         );
       });
@@ -355,7 +224,7 @@ class _AppShellState extends State<AppShell> {
           .map((a) => '${a.type}-${a.severity}')
           .toSet();
       final toAdd = newAlerts.where(
-            (a) => !existingKeys.contains('${a.type}-${a.severity}'),
+        (a) => !existingKeys.contains('${a.type}-${a.severity}'),
       );
       _alerts = [...toAdd, ..._alerts];
     });
@@ -395,7 +264,6 @@ class _AppShellState extends State<AppShell> {
       );
     });
   }
-
 
   // - - 9. ALERT MANAGEMENT - -
   // placeholder alerts muna ok? recent history siya
@@ -492,6 +360,7 @@ class _AppShellState extends State<AppShell> {
   // going from home screen to other screens using the nav bar or nav cards sa home screen
   @override
   Widget build(BuildContext context) {
+    final userController = context.watch<UserController>(); // ✅ HERE
     return Scaffold(
       //main container
       body: Container(
@@ -543,36 +412,115 @@ class _AppShellState extends State<AppShell> {
                           if (_currentScreen == AppScreen.login)
                             LoginScreen(
                               onGoToSignUp: () => _goTo(AppScreen.signup),
-                              onLogin: _onLogin,
+                              onLogin: (email, password) async {
+                                await userController.login(email, password);
+
+                                if (userController.isAuthenticated) {
+                                  if (!mounted) return;
+
+                                  setState(() {
+                                    _currentScreen = AppScreen.home;
+                                  });
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Login failed"),
+                                    ),
+                                  );
+                                }
+                              },
                             ),
 
                           if (_currentScreen == AppScreen.signup)
                             SignUpScreen(
                               onGoToLogin: () => _goTo(AppScreen.login),
-                              onSignUp: _onSignUp,
+                              onSignUp:
+                                  ({
+                                    required String firstName,
+                                    required String middleName,
+                                    required String lastName,
+                                    required String email,
+                                    required String phoneNumber,
+                                    required String password,
+                                  }) async {
+                                    try {
+                                      await userController.signup(
+                                        firstName: firstName,
+                                        middleName: middleName,
+                                        lastName: lastName,
+                                        email: email,
+                                        phoneNumber: phoneNumber,
+                                        password: password,
+                                        vehicleType: "sedan",
+                                        vehicleNickname: "My Vehicle",
+                                      );
+
+                                      if (!context.mounted) return;
+
+                                      setState(() {
+                                        _currentScreen = AppScreen.home;
+                                      });
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(content: Text(e.toString())),
+                                      );
+                                    }
+                                  },
                             ),
 
-                          if (_currentScreen == AppScreen.myAccount)
-                            MyAccountScreen(
-                              userInfo: _userInfo,
-                              onBack: () => _goTo(_myAccountReturnTo),
-                              onUserInfoChanged: (info) async {
-                                final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
-                                if (uid != null) {
-                                  //syncs local change sa firestore
-                                  await FirebaseService.updateUserDocument(uid, {
-                                    'firstName': info.firstName,
-                                    'middleName': info.middleName,
-                                    'lastName': info.lastName,
-                                    'email': info.email,
-                                    'phoneNumber': info.phoneNumber,
-                                  });
+                          if (_currentScreen == AppScreen.myAccount) ...[
+                            Builder(
+                              builder: (context) {
+                                final user = userController.userModel;
+                                print("🖥️ UI USER MODEL: $user");
+                                // Optional loading state
+                                if (user == null) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
                                 }
-                                setState(() => _userInfo = info);
+
+                                return MyAccountScreen(
+                                  userInfo: UserInfo(
+                                    firstName: user.firstName,
+                                    middleName: user.middleName,
+                                    lastName: user.lastName,
+                                    email: user.email,
+                                    phoneNumber: user.phoneNumber,
+                                    createdAt: user.createdAt,
+                                  ),
+
+                                  onBack: () => _goTo(_myAccountReturnTo),
+                                  onUserInfoChanged: (info) async {
+                                    await userController.updateProfile({
+                                      'firstName': info.firstName,
+                                      'middleName': info.middleName,
+                                      'lastName': info.lastName,
+                                      'email': info.email,
+                                      'phoneNumber': info.phoneNumber,
+                                    });
+
+                                    await userController
+                                        .refreshUser(); // 🔥 THIS IS THE MISSING PART
+                                  },
+
+                                  onLogout: () async {
+                                    await userController.logout();
+                                    if (!mounted) return;
+                                    _goTo(AppScreen.login);
+                                  },
+
+                                  onDeleteAccount: () async {
+                                    await userController.deleteAccount();
+                                    if (!mounted) return;
+                                    _goTo(AppScreen.login);
+                                  },
+                                );
                               },
-                              onLogout: _onLogout,
-                              onDeleteAccount: _onDeleteAccount,
                             ),
+                          ],
 
                           if (_currentScreen == AppScreen.home)
                             HomeScreen(
@@ -611,12 +559,19 @@ class _AppShellState extends State<AppShell> {
                                     _vehicleNickname = nickname;
                                   });
                                   //sync update vehicle stuff sa firestore
-                                  final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+                                  final uid = firebase_auth
+                                      .FirebaseAuth
+                                      .instance
+                                      .currentUser
+                                      ?.uid;
                                   if (uid != null) {
-                                    await FirebaseService.updateUserDocument(uid, {
-                                      'vehicleType': type.name,
-                                      'vehicleNickname': nickname,
-                                    });
+                                    await FirebaseService.updateUserDocument(
+                                      uid,
+                                      {
+                                        'vehicleType': type.name,
+                                        'vehicleNickname': nickname,
+                                      },
+                                    );
                                   }
                                 },
                               ),
@@ -639,12 +594,18 @@ class _AppShellState extends State<AppShell> {
                                 tempUnit: _tempUnit,
                                 distanceUnit: _distanceUnit,
                                 onBack: () => _goTo(AppScreen.home),
-                                onNotificationsChanged: (v) => setState(() => _notificationsEnabled = v),
-                                onSoundChanged: (v) => setState(() => _soundEnabled = v),
-                                onTempUnitChanged: (u) => setState(() => _tempUnit = u),
-                                onDistanceUnitChanged: (u) => setState(() => _distanceUnit = u),
-                                onUserInfoChanged: (info) => setState(() => _userInfo = info),
-                                onGoToMyAccount: () => _goTo(AppScreen.myAccount),
+                                onNotificationsChanged: (v) =>
+                                    setState(() => _notificationsEnabled = v),
+                                onSoundChanged: (v) =>
+                                    setState(() => _soundEnabled = v),
+                                onTempUnitChanged: (u) =>
+                                    setState(() => _tempUnit = u),
+                                onDistanceUnitChanged: (u) =>
+                                    setState(() => _distanceUnit = u),
+                                onUserInfoChanged: (info) =>
+                                    setState(() => _userInfo = info),
+                                onGoToMyAccount: () =>
+                                    _goTo(AppScreen.myAccount),
                               ),
                             ),
 
@@ -669,7 +630,7 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
               //overlay layer
-              //magdidisplay lang bottomnav if not on auth/onboarding screens
+              // //magdidisplay lang bottomnav if not on auth/onboarding screens
               if (_currentScreen != AppScreen.login &&
                   _currentScreen != AppScreen.signup &&
                   _currentScreen != AppScreen.launch &&
@@ -684,7 +645,9 @@ class _AppShellState extends State<AppShell> {
                     onNavigate: _goTo,
                     onGoToMyAccount: () =>
                         _goToMyAccount(returnTo: _currentScreen),
-                    onLogout: _onLogout,
+                    onLogout: () async {
+                      await userController.logout();
+                    },
                   ),
                 ),
             ],
@@ -695,15 +658,12 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
-
 //pag hinde pa gawa ang screen, ayan muna ang lalabas
 class _PlaceholderScreen extends StatelessWidget {
   final String label;
   final VoidCallback onBack;
 
-
   const _PlaceholderScreen({required this.label, required this.onBack});
-
 
   @override
   Widget build(BuildContext context) {
@@ -746,4 +706,3 @@ class _PlaceholderScreen extends StatelessWidget {
     );
   }
 }
-

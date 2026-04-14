@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../app_theme.dart';
 import '../models/user_info.dart';
-
+import 'package:provider/provider.dart';
+import 'package:roadsense_unang_hirit/backend/controller/user.dart';
 
 // mga pangcall, dinedefine niya yung data na kailangan sa screen
 class MyAccountScreen extends StatefulWidget {
@@ -12,8 +13,7 @@ class MyAccountScreen extends StatefulWidget {
   final VoidCallback onLogout;
   final VoidCallback onDeleteAccount;
 
-
-  const MyAccountScreen({
+  MyAccountScreen({
     super.key,
     required this.userInfo,
     required this.onBack,
@@ -22,11 +22,9 @@ class MyAccountScreen extends StatefulWidget {
     required this.onDeleteAccount,
   });
 
-
   @override
   State<MyAccountScreen> createState() => _MyAccountScreenState();
 }
-
 
 //this class ay nag-eexist if the user wants to edit their info
 class _MyAccountScreenState extends State<MyAccountScreen> {
@@ -37,6 +35,9 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
   late TextEditingController _lastName;
   late TextEditingController _email;
 
+  late TextEditingController currentPasswordController;
+  late TextEditingController newPasswordController;
+  late TextEditingController confirmPasswordController;
 
   @override
   void initState() {
@@ -45,8 +46,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     _middleName = TextEditingController(text: widget.userInfo.middleName);
     _lastName = TextEditingController(text: widget.userInfo.lastName);
     _email = TextEditingController(text: widget.userInfo.email);
-  }
 
+    currentPasswordController = TextEditingController();
+    newPasswordController = TextEditingController();
+    confirmPasswordController = TextEditingController();
+  }
 
   //updating the needed data para magreflect sa display
   @override
@@ -60,7 +64,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     }
   }
 
-
   //kiniclear yung controllers from memory pag umalis si user sa settings
   @override
   void dispose() {
@@ -68,9 +71,13 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     _middleName.dispose();
     _lastName.dispose();
     _email.dispose();
+
+    currentPasswordController.dispose();
+    newPasswordController.dispose();
+    confirmPasswordController.dispose();
+
     super.dispose();
   }
-
 
   void _saveAccount() {
     widget.onUserInfoChanged(
@@ -85,7 +92,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     setState(() => _isEditing = false);
   }
 
-
   //nagrereset to orig values
   void _cancelEdit() {
     _firstName.text = widget.userInfo.firstName;
@@ -94,7 +100,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     _email.text = widget.userInfo.email;
     setState(() => _isEditing = false);
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -330,6 +335,8 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
               child: Column(
                 children: [
                   TextField(
+                    controller: currentPasswordController,
+                    obscureText: true,
                     decoration: InputDecoration(
                       labelText: 'Current Password',
                       labelStyle: GoogleFonts.inter(color: Colors.white70),
@@ -339,11 +346,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    style: GoogleFonts.inter(color: Colors.white),
-                    obscureText: true,
                   ),
                   const SizedBox(height: 12),
                   TextField(
+                    controller: newPasswordController,
+                    obscureText: true,
                     decoration: InputDecoration(
                       labelText: 'New Password',
                       labelStyle: GoogleFonts.inter(color: Colors.white70),
@@ -354,10 +361,11 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                       ),
                     ),
                     style: GoogleFonts.inter(color: Colors.white),
-                    obscureText: true,
                   ),
                   const SizedBox(height: 12),
                   TextField(
+                    controller: confirmPasswordController,
+                    obscureText: true,
                     decoration: InputDecoration(
                       labelText: 'Confirm New Password',
                       labelStyle: GoogleFonts.inter(color: Colors.white70),
@@ -367,19 +375,46 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    style: GoogleFonts.inter(color: Colors.white),
-                    obscureText: true,
                   ),
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () =>
+                      onPressed: () async {
+                        final current = currentPasswordController.text;
+                        final newPass = newPasswordController.text;
+                        final confirm = confirmPasswordController.text;
+
+                        if (newPass != confirm) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Password updated successfully!'),
+                              content: Text("Passwords do not match"),
                             ),
-                          ),
+                          );
+                          return;
+                        }
+
+                        try {
+                          await context.read<UserController>().changePassword(
+                            currentPassword: current,
+                            newPassword: newPass,
+                          );
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Password updated successfully'),
+                            ),
+                          );
+
+                          currentPasswordController.clear();
+                          newPasswordController.clear();
+                          confirmPasswordController.clear();
+                        } catch (e) {
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                        }
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -490,7 +525,6 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 
-
   void _showDeleteAccountConfirmation() {
     showDialog<void>(
       context: context,
@@ -530,13 +564,12 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 
-
   Widget _accountRow(
-      IconData icon,
-      String label,
-      String? value, {
-        TextEditingController? controller,
-      }) {
+    IconData icon,
+    String label,
+    String? value, {
+    TextEditingController? controller,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -592,4 +625,3 @@ class _MyAccountScreenState extends State<MyAccountScreen> {
     );
   }
 }
-

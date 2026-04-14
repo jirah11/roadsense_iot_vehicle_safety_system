@@ -10,7 +10,6 @@ class UserInfo {
   final String vehicleType;
   final String vehicleNickname;
 
-
   const UserInfo({
     this.firstName = '',
     this.middleName = '',
@@ -21,7 +20,6 @@ class UserInfo {
     this.vehicleType = 'sedan',
     this.vehicleNickname = 'My Vehicle',
   });
-
 
   UserInfo copyWith({
     String? firstName,

@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:roadsense_unang_hirit/backend/firebase_service.dart';
 import 'package:roadsense_unang_hirit/screens/help_info_screen.dart';
 import 'package:roadsense_unang_hirit/screens/history_logs_screen.dart';
 import 'package:roadsense_unang_hirit/screens/settings_screen.dart';
 import 'package:roadsense_unang_hirit/screens/vehicle_profile_screen.dart';
 import 'app_theme.dart';
+import 'backend/repository/realtime_database.dart';
 import 'models/models.dart';
 import 'screens/home_screen.dart';
 import 'widgets/bottom_nav.dart';
@@ -20,8 +20,12 @@ import 'screens/onboarding_screen.dart';
 import "package:shared_preferences/shared_preferences.dart";
 import 'package:provider/provider.dart';
 import 'backend/controller/user.dart';
+import 'backend/controller/iot.dart';
+import 'backend/service/iot.dart';
+import 'backend/repository/realtime_database.dart';
+import 'backend/repository/iot.dart';
 
-//--ENUMS--
+// -- ENUMS --
 enum AppScreen {
   launch,
   onboarding,
@@ -53,17 +57,22 @@ class _AppShellState extends State<AppShell> {
   AppScreen _currentScreen = AppScreen.launch;
   AppScreen _myAccountReturnTo = AppScreen.settings;
 
+  late final IoTService _iotService;
+  late final RealtimeDbService _realtimeDbService;
+  late final IoTRepository _iotRepository;
+  IoTController? _iotController;
+
   // - - 2. VEHICLE + USER DATA - -
-  late VehicleType _vehicleType;
-  late String _vehicleNickname;
-  late UserInfo _userInfo; //holds profile data
+  VehicleType _vehicleType = VehicleType.sedan;
+  String _vehicleNickname = 'My Vehicle';
+  VehicleThresholds? _customThresholds;
+  late UserInfo _userInfo;
 
   // - - 3. IOT + SENSOR DATA - -
   late SensorData _sensorData;
   late List<AlertModel> _alerts;
   late bool _iotConnected;
   late bool _iotPaired;
-  Timer? _sensorTimer; //simulation
 
   // - - 4. USER PREFERENCES - -
   bool _notificationsEnabled = true;
@@ -71,42 +80,188 @@ class _AppShellState extends State<AppShell> {
   TemperatureUnit _tempUnit = TemperatureUnit.celsius;
   DistanceUnit _distanceUnit = DistanceUnit.centimeters;
 
+  StreamSubscription? _iotSub;
+  StreamSubscription? _alertHistorySub;
+  String? _connectedDeviceId;
+
   // - - 5. LIFECYCLE METHODS - -
   @override
   void initState() {
     super.initState();
+    _iotService = IoTService();
+    _realtimeDbService = RealtimeDbService();
+    _iotRepository = IoTRepository(_iotService, _realtimeDbService);
+    _iotController = IoTController(_iotRepository);
+
     _userInfo = const UserInfo();
-    _vehicleType = VehicleType.sedan;
-    _vehicleNickname = 'My Vehicle';
     _sensorData = SensorData(
       floodLevel: 0,
       temperature: 0,
       timestamp: DateTime.now(),
     );
-    _alerts = [];
     _iotConnected = false;
     _iotPaired = false;
-    _notificationsEnabled = true;
-    _soundEnabled = true;
-    _startSensorSimulation(); //3 sec loop
+    _alerts = [];
 
-    // ✅ FIX: AUTO LOAD USER IF ALREADY LOGGED IN
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final userController = context.read<UserController>();
 
       if (userController.isAuthenticated) {
-        print("🔄 AUTO-LOADING USER ON APP START...");
-        // await userController.refreshUser();
-        print("✅ USER LOADED: ${userController.userModel}");
+        debugPrint("🔄 AUTO-LOADING USER ON APP START...");
+        final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          await _loadInitialIoTData("RSD1");
+          await _loadVehicleProfileFromDb("RSD1");
+          await _loadUserSettingsFromDb(uid);
+          // If device was previously connected, reattach stream
+          _connectedDeviceId = "RSD1";
+          _attachDeviceStream("RSD1");
+          _attachAlertHistoryStream("RSD1");
+        }
       }
     });
   }
 
   @override
   void dispose() {
-    //cancel timer para iwas memory leaks
-    _sensorTimer?.cancel();
+    _iotSub?.cancel();
+    _alertHistorySub?.cancel();
     super.dispose();
+  }
+
+  // ==============================
+  // DB LOAD: IOT INITIAL DATA
+  // ==============================
+  Future<void> _loadInitialIoTData(String deviceId) async {
+    try {
+      final data = await _iotController!.getDevice(deviceId);
+
+      if (data == null) {
+        debugPrint("⚠️ No device data found");
+        return;
+      }
+
+      final sensors = data['sensors'] ?? {};
+      final status = data['status'] ?? {};
+
+      setState(() {
+        _sensorData = SensorData(
+          floodLevel: (sensors['distance'] ?? 0).toDouble(),
+          temperature: (sensors['temperature'] ?? 0).toDouble(),
+          timestamp: DateTime.now(),
+        );
+        _iotConnected = status['connected'] ?? false;
+        _iotPaired = status['online'] ?? false;
+      });
+
+      debugPrint("✅ Initial IoT data loaded");
+    } catch (e) {
+      debugPrint("❌ Failed to load IoT initial data: $e");
+    }
+  }
+
+  // ==============================
+  // DB LOAD: VEHICLE PROFILE
+  // ==============================
+  Future<void> _loadVehicleProfileFromDb(String deviceId) async {
+    try {
+      final profile = await _iotController!.loadVehicleProfile(deviceId);
+
+      if (profile == null) {
+        debugPrint("⚠️ No vehicle profile in DB, using defaults");
+        return;
+      }
+
+      final settings = profile['settings'] ?? profile;
+      final thresholdsRaw = settings['thresholds'];
+
+      setState(() {
+        final typeStr = settings['vehicle_type'] as String?;
+        if (typeStr != null) {
+          _vehicleType = VehicleType.values.firstWhere(
+                (t) => t.name == typeStr,
+            orElse: () => VehicleType.sedan,
+          );
+        }
+
+        final nickname = settings['nickname'] as String?;
+        if (nickname != null && nickname.isNotEmpty) {
+          _vehicleNickname = nickname;
+        }
+
+        if (thresholdsRaw != null) {
+          final t = Map<String, dynamic>.from(thresholdsRaw as Map);
+          _customThresholds = VehicleThresholds(
+            floodCaution: (t['flood_caution'] ?? 20).toDouble(),
+            floodDanger: (t['flood_danger'] ?? 35).toDouble(),
+            tempCaution: (t['temp_caution'] ?? 45).toDouble(),
+            tempDanger: (t['temp_danger'] ?? 55).toDouble(),
+          );
+        }
+      });
+
+      debugPrint("✅ Vehicle profile loaded: $_vehicleType / $_vehicleNickname");
+    } catch (e) {
+      debugPrint("❌ Failed to load vehicle profile: $e");
+    }
+  }
+
+  // ==============================
+  // DB LOAD: USER SETTINGS
+  // ==============================
+  Future<void> _loadUserSettingsFromDb(String uid) async {
+    try {
+      final settings = await _iotController!.loadUserSettings(uid);
+
+      if (settings == null) {
+        debugPrint("⚠️ No user settings in DB, using defaults");
+        return;
+      }
+
+      setState(() {
+        _notificationsEnabled =
+            settings['notifications_enabled'] as bool? ?? true;
+        _soundEnabled = settings['sound_enabled'] as bool? ?? true;
+
+        final tempStr = settings['temp_unit'] as String?;
+        _tempUnit = tempStr == 'fahrenheit'
+            ? TemperatureUnit.fahrenheit
+            : TemperatureUnit.celsius;
+
+        final distStr = settings['distance_unit'] as String?;
+        _distanceUnit = distStr == 'inches'
+            ? DistanceUnit.inches
+            : DistanceUnit.centimeters;
+      });
+
+      debugPrint("✅ User settings loaded");
+    } catch (e) {
+      debugPrint("❌ Failed to load user settings: $e");
+    }
+  }
+
+  // ==============================
+  // DB SAVE: USER SETTINGS
+  // ==============================
+  Future<void> _saveUserSettingsToDb() async {
+    final uid = firebase_auth.FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      await _iotController!.saveUserSettings(
+        uid: uid,
+        deviceId: _connectedDeviceId!, // 🔥 ADD THIS
+        notificationsEnabled: _notificationsEnabled,
+        soundEnabled: _soundEnabled,
+        tempUnit:
+        _tempUnit == TemperatureUnit.fahrenheit ? 'fahrenheit' : 'celsius',
+        distanceUnit:
+        _distanceUnit == DistanceUnit.inches ? 'inches' : 'centimeters',
+      );
+      debugPrint("✅ User settings saved to DB");
+    } catch (e) {
+      debugPrint("❌ Failed to save user settings: $e");
+    }
   }
 
   // - - 6. NAVIGATION LOGIC - -
@@ -114,9 +269,7 @@ class _AppShellState extends State<AppShell> {
 
   void _goToMyAccount({required AppScreen returnTo}) {
     final userController = context.read<UserController>();
-
-    userController.refreshUser(); // 🔥 THIS LINE FIXES YOUR PROBLEM
-
+    userController.refreshUser();
     setState(() {
       _myAccountReturnTo = returnTo;
       _currentScreen = AppScreen.myAccount;
@@ -124,44 +277,94 @@ class _AppShellState extends State<AppShell> {
   }
 
   // - - 8. IOT + SENSOR LOGIC - -
-  //check if nagfoflow data
   bool get _iotLive => _iotPaired && _iotConnected;
 
-  //simulates real time sensor
-  // generated number every 3 sec for the sensors, kada mag-uupdate, icacall _checkAlerts()
-  void _startSensorSimulation() {
-    _sensorTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (!mounted) return;
-      setState(() {
-        if (!_iotLive) {
-          _sensorData = SensorData(
-            floodLevel: 0,
-            temperature: 0,
-            timestamp: DateTime.now(),
-          );
-          return;
+  // ==============================
+  // REAL-TIME DEVICE STREAM
+  // ==============================
+  void _attachDeviceStream(String deviceId) {
+    _iotSub?.cancel();
+    _iotSub = null;
+
+    debugPrint("📡 [STREAM] Listening to device: $deviceId");
+
+    _iotSub = _iotService.listenToDevice(deviceId).listen(
+          (event) {
+        final raw = event.snapshot.value;
+        if (!mounted || raw == null) return;
+
+        try {
+          final data = Map<String, dynamic>.from(raw as Map);
+          final sensors = data['sensors'] ?? {};
+          final status = data['status'] ?? {};
+
+          final newFlood =
+          (sensors['distance'] ?? sensors['floodLevel'] ?? 0).toDouble();
+          final newTemp = (sensors['temperature'] ?? 0).toDouble();
+          final newConnected = status['connected'] ?? false;
+          final newPaired = status['online'] ?? false;
+
+          setState(() {
+            _sensorData = SensorData(
+              floodLevel: newFlood,
+              temperature: newTemp,
+              timestamp: DateTime.now(),
+            );
+            _iotConnected = newConnected;
+            _iotPaired = newPaired;
+          });
+
+          // Check and persist alerts from live data
+          _checkAlerts();
+        } catch (e) {
+          debugPrint("❌ [STREAM PARSE ERROR]: $e");
         }
-        final prev = _sensorData;
-        _sensorData = SensorData(
-          floodLevel:
-              (prev.floodLevel +
-                      (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 3)
-                  .clamp(0.0, 60.0),
-          temperature:
-              (prev.temperature +
-                      (0.5 - (DateTime.now().millisecond % 1000) / 1000) * 2)
-                  .clamp(20.0, 60.0),
-          timestamp: DateTime.now(),
-        );
-      });
-      _checkAlerts();
-    });
+      },
+      onError: (error) => debugPrint("❌ [STREAM ERROR]: $error"),
+      onDone: () => debugPrint("ℹ️ [STREAM] Closed"),
+    );
   }
 
-  // auto-generated yung alerts pag nakalampas sa threshold safety keme
+  // ==============================
+  // REAL-TIME ALERT HISTORY STREAM
+  // ==============================
+  void _attachAlertHistoryStream(String deviceId) {
+    _alertHistorySub?.cancel();
+    _alertHistorySub = null;
+
+    _alertHistorySub =
+        _iotController!.listenToAlertHistory(deviceId).listen((alertMaps) {
+          if (!mounted) return;
+
+          final parsed = alertMaps.map((m) {
+            return AlertModel(
+              id: m['_key'] as String? ?? m['id'] as String? ?? '',
+              type: AlertType.values.firstWhere(
+                    (t) => t.name == (m['type'] as String? ?? ''),
+                orElse: () => AlertType.flood,
+              ),
+              severity: AlertSeverity.values.firstWhere(
+                    (s) => s.name == (m['severity'] as String? ?? ''),
+                orElse: () => AlertSeverity.caution,
+              ),
+              message: m['message'] as String? ?? '',
+              timestamp: m['timestamp'] != null
+                  ? DateTime.fromMillisecondsSinceEpoch(m['timestamp'] as int)
+                  : DateTime.now(),
+              value: (m['value'] ?? 0).toDouble(),
+              acknowledged: m['acknowledged'] as bool? ?? false,
+            );
+          }).toList();
+
+          setState(() {
+            _alerts = parsed;
+          });
+        }, onError: (e) => debugPrint("❌ [ALERT STREAM ERROR]: $e"));
+  }
+
   void _checkAlerts() {
     if (!_iotLive) return;
-    final thresholds = VehicleThresholds.forType(_vehicleType);
+    final thresholds = _thresholds;
     final newAlerts = <AlertModel>[];
 
     if (_sensorData.floodLevel >= thresholds.floodDanger) {
@@ -218,113 +421,164 @@ class _AppShellState extends State<AppShell> {
 
     if (newAlerts.isEmpty) return;
 
-    setState(() {
-      final existingKeys = _alerts
-          .take(3)
-          .map((a) => '${a.type}-${a.severity}')
-          .toSet();
-      final toAdd = newAlerts.where(
-        (a) => !existingKeys.contains('${a.type}-${a.severity}'),
-      );
-      _alerts = [...toAdd, ..._alerts];
-    });
+    // Deduplicate: don't re-add same type+severity if already present and unacknowledged
+    final existingKeys = _alerts
+        .where((a) => !a.acknowledged)
+        .take(3)
+        .map((a) => '${a.type}-${a.severity}')
+        .toSet();
+
+    final toAdd = newAlerts
+        .where((a) => !existingKeys.contains('${a.type}-${a.severity}'))
+        .toList();
+
+    if (toAdd.isEmpty) return;
+
+    // 🔥 Persist new alerts to Firebase (alert history stream will update _alerts)
+    if (_connectedDeviceId != null) {
+      for (final alert in toAdd) {
+        _iotController!
+            .saveAlert(
+          deviceId: _connectedDeviceId!,
+          alertData: {
+            'id': alert.id,
+            'type': alert.type.name,
+            'severity': alert.severity.name,
+            'message': alert.message,
+            'timestamp': alert.timestamp.millisecondsSinceEpoch,
+            'value': alert.value,
+            'acknowledged': alert.acknowledged,
+          },
+        )
+            .catchError((e) => debugPrint("❌ Failed to save alert: $e"));
+      }
+    }
   }
 
-  //logic sa pair and connect para sa iot sensor device
+  // ==============================
+  // CONNECT IOT DEVICE
+  // ==============================
   void _onConnectIotDevice({
     required String deviceId,
     required String password,
-  }) {
-    setState(() {
-      //mark device both paired, saved sa settings tapos connected sa ano keme sa lahat
-      _iotPaired = true;
-      _iotConnected = true;
-      //ui shi pag connected na sa sensor reading
-      _sensorData = SensorData(
-        floodLevel: 12,
-        temperature: 35,
-        timestamp: DateTime.now(),
+  }) async {
+    try {
+      debugPrint("🔌 [CONNECT] START → $deviceId");
+
+      if (_iotController == null) {
+        debugPrint("❌ IoTController NOT initialized");
+        return;
+      }
+
+      await _iotController!.connectDevice(
+        deviceId: deviceId,
+        password: password,
       );
-    });
+
+      if (!mounted) return;
+
+      _connectedDeviceId = deviceId;
+
+      setState(() {
+        _iotPaired = true;
+        _iotConnected = true;
+      });
+
+      await _loadVehicleProfileFromDb(deviceId);
+
+      // Attach real-time streams
+      _attachDeviceStream(deviceId);
+      _attachAlertHistoryStream(deviceId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Device connected (live data)")),
+        );
+      }
+    } catch (e) {
+      debugPrint("❌ [CONNECT ERROR]: $e");
+      if (!mounted) return;
+      setState(() {
+        _iotPaired = false;
+        _iotConnected = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Connect failed: $e")),
+      );
+    }
   }
 
-  //handles logic sa disconnecting shi
-  void _onDisconnectIotDevice() {
-    setState(() {
-      //resets connection states
-      _iotPaired = false;
-      _iotConnected = false;
-      //tanggal lahat ng nasa alerts list since wala na iot aww :((
-      _alerts = [];
-      //no sensor data, back to 0
-      _sensorData = SensorData(
-        floodLevel: 0,
-        temperature: 0,
-        timestamp: DateTime.now(),
-      );
-    });
+  // ==============================
+  // DISCONNECT IOT DEVICE
+  // ==============================
+  void _onDisconnectIotDevice() async {
+    try {
+      await _iotSub?.cancel();
+      _iotSub = null;
+
+      await _alertHistorySub?.cancel();
+      _alertHistorySub = null;
+
+      final deviceId = _connectedDeviceId;
+
+      if (deviceId != null) {
+        await _iotService.updateStatus(deviceId, {'connected': false});
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _iotPaired = false;
+        _iotConnected = false;
+        _alerts = [];
+        _sensorData = SensorData(
+          floodLevel: 0,
+          temperature: 0,
+          timestamp: DateTime.now(),
+        );
+      });
+
+      _connectedDeviceId = null;
+    } catch (e) {
+      debugPrint("❌ [DISCONNECT ERROR]: $e");
+    }
   }
 
   // - - 9. ALERT MANAGEMENT - -
-  // placeholder alerts muna ok? recent history siya
-  List<AlertModel> _initialAlerts() {
-    final now = DateTime.now();
-    return [
-      AlertModel(
-        id: '1',
-        type: AlertType.flood,
-        severity: AlertSeverity.caution,
-        message: 'Moderate flood level detected',
-        timestamp: now.subtract(const Duration(hours: 1)),
-        value: 22,
-        acknowledged: false,
-      ),
-      AlertModel(
-        id: '2',
-        type: AlertType.temperature,
-        severity: AlertSeverity.danger,
-        message: 'DANGER: Engine temperature critically high!',
-        timestamp: now.subtract(const Duration(hours: 2)),
-        value: 52,
-        acknowledged: true,
-      ),
-      AlertModel(
-        id: '3',
-        type: AlertType.flood,
-        severity: AlertSeverity.danger,
-        message: 'DANGER: High flood level detected! Avoid this area.',
-        timestamp: now.subtract(const Duration(days: 2)),
-        value: 38,
-        acknowledged: true,
-      ),
-      AlertModel(
-        id: '4',
-        type: AlertType.temperature,
-        severity: AlertSeverity.caution,
-        message: 'CAUTION: Engine temperature elevated. Monitor closely.',
-        timestamp: now.subtract(const Duration(days: 5)),
-        value: 43,
-        acknowledged: true,
-      ),
-    ];
-  }
-
   void _acknowledgeAlert(String id) {
+    // Find the alert's Firebase push key (_key field from stream)
+    final alert = _alerts.firstWhere((a) => a.id == id, orElse: () => _alerts.first);
+    final alertKey = alert.id; // id is set from _key in the stream
+
     setState(() {
       _alerts = _alerts
           .map((a) => a.id == id ? a.copyWith(acknowledged: true) : a)
           .toList();
     });
+
+    if (_connectedDeviceId != null) {
+      _iotController!
+          .acknowledgeAlert(deviceId: _connectedDeviceId!, alertKey: alertKey)
+          .catchError((e) => debugPrint("❌ Failed to acknowledge alert: $e"));
+    }
   }
 
   void _clearAllAlerts() {
     setState(() {
       _alerts = _alerts.map((a) => a.copyWith(acknowledged: true)).toList();
     });
+
+    if (_connectedDeviceId != null) {
+      _iotController!
+          .acknowledgeAllAlerts(_connectedDeviceId!)
+          .catchError((e) => debugPrint("❌ Failed to clear all alerts: $e"));
+    }
   }
 
-  //  - - 10. CONVENIENCE GETTERS + HELPERS - -
-  VehicleThresholds get _thresholds => VehicleThresholds.forType(_vehicleType);
+  // - - 10. CONVENIENCE GETTERS - -
+  VehicleThresholds get _thresholds =>
+      _customThresholds ?? VehicleThresholds.forType(_vehicleType);
+
   List<AlertModel> get _activeAlerts =>
       _iotLive ? _alerts.where((a) => !a.acknowledged).toList() : [];
 
@@ -338,31 +592,12 @@ class _AppShellState extends State<AppShell> {
     await prefs.setBool('roadsense_hasSeenOnboarding', true);
   }
 
-  String _monthName(int month) {
-    const names = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return names[month - 1];
-  }
-
-  // build
-  // going from home screen to other screens using the nav bar or nav cards sa home screen
+  // - - 11. BUILD - -
   @override
   Widget build(BuildContext context) {
-    final userController = context.watch<UserController>(); // ✅ HERE
+    final userController = context.watch<UserController>();
+
     return Scaffold(
-      //main container
       body: Container(
         width: double.infinity,
         height: double.infinity,
@@ -378,7 +613,6 @@ class _AppShellState extends State<AppShell> {
           ),
         ),
         child: SafeArea(
-          //prevents ui from overlapping
           child: Stack(
             clipBehavior: Clip.none,
             children: [
@@ -391,13 +625,12 @@ class _AppShellState extends State<AppShell> {
                       height: double.infinity,
                       child: Stack(
                         children: [
-                          //conditional rendering para malaman kung anong screen active
-                          //based sa _currentScreen
                           if (_currentScreen == AppScreen.launch)
                             LaunchScreen(
                               hasSeenOnboarding: _hasSeenOnboarding,
                               goToLogin: () => _goTo(AppScreen.login),
-                              goToOnboarding: () => _goTo(AppScreen.onboarding),
+                              goToOnboarding: () =>
+                                  _goTo(AppScreen.onboarding),
                             ),
 
                           if (_currentScreen == AppScreen.onboarding)
@@ -414,9 +647,20 @@ class _AppShellState extends State<AppShell> {
                               onGoToSignUp: () => _goTo(AppScreen.signup),
                               onLogin: (email, password) async {
                                 await userController.login(email, password);
-
                                 if (userController.isAuthenticated) {
                                   if (!mounted) return;
+
+                                  final uid = firebase_auth
+                                      .FirebaseAuth.instance.currentUser?.uid;
+
+                                  if (uid != null) {
+                                    await _loadInitialIoTData("RSD1");
+                                    await _loadVehicleProfileFromDb("RSD1");
+                                    await _loadUserSettingsFromDb(uid);
+                                    _connectedDeviceId = "RSD1";
+                                    _attachDeviceStream("RSD1");
+                                    _attachAlertHistoryStream("RSD1");
+                                  }
 
                                   setState(() {
                                     _currentScreen = AppScreen.home;
@@ -434,48 +678,55 @@ class _AppShellState extends State<AppShell> {
                           if (_currentScreen == AppScreen.signup)
                             SignUpScreen(
                               onGoToLogin: () => _goTo(AppScreen.login),
-                              onSignUp:
-                                  ({
-                                    required String firstName,
-                                    required String middleName,
-                                    required String lastName,
-                                    required String email,
-                                    required String phoneNumber,
-                                    required String password,
-                                  }) async {
-                                    try {
-                                      await userController.signup(
-                                        firstName: firstName,
-                                        middleName: middleName,
-                                        lastName: lastName,
-                                        email: email,
-                                        phoneNumber: phoneNumber,
-                                        password: password,
-                                        vehicleType: "sedan",
-                                        vehicleNickname: "My Vehicle",
-                                      );
+                              onSignUp: ({
+                                required String firstName,
+                                required String middleName,
+                                required String lastName,
+                                required String email,
+                                required String phoneNumber,
+                                required String password,
+                              }) async {
+                                try {
+                                  await userController.signup(
+                                    firstName: firstName,
+                                    middleName: middleName,
+                                    lastName: lastName,
+                                    email: email,
+                                    phoneNumber: phoneNumber,
+                                    password: password,
+                                    vehicleType: "sedan",
+                                    vehicleNickname: "My Vehicle",
+                                  );
 
-                                      if (!context.mounted) return;
+                                  if (!context.mounted) return;
 
-                                      setState(() {
-                                        _currentScreen = AppScreen.home;
-                                      });
-                                    } catch (e) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(content: Text(e.toString())),
-                                      );
-                                    }
-                                  },
+                                  // After signup, attach streams for default device
+                                  final uid = firebase_auth
+                                      .FirebaseAuth.instance.currentUser?.uid;
+                                  if (uid != null) {
+                                    await _loadInitialIoTData("RSD1");
+                                    await _loadVehicleProfileFromDb("RSD1");
+                                    await _loadUserSettingsFromDb(uid);
+                                    _connectedDeviceId = "RSD1";
+                                    _attachDeviceStream("RSD1");
+                                    _attachAlertHistoryStream("RSD1");
+                                  }
+
+                                  setState(() {
+                                    _currentScreen = AppScreen.home;
+                                  });
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(e.toString())),
+                                  );
+                                }
+                              },
                             ),
 
                           if (_currentScreen == AppScreen.myAccount) ...[
                             Builder(
                               builder: (context) {
                                 final user = userController.userModel;
-                                print("🖥️ UI USER MODEL: $user");
-                                // Optional loading state
                                 if (user == null) {
                                   return const Center(
                                     child: CircularProgressIndicator(),
@@ -491,7 +742,6 @@ class _AppShellState extends State<AppShell> {
                                     phoneNumber: user.phoneNumber,
                                     createdAt: user.createdAt,
                                   ),
-
                                   onBack: () => _goTo(_myAccountReturnTo),
                                   onUserInfoChanged: (info) async {
                                     await userController.updateProfile({
@@ -501,18 +751,24 @@ class _AppShellState extends State<AppShell> {
                                       'email': info.email,
                                       'phoneNumber': info.phoneNumber,
                                     });
-
-                                    await userController
-                                        .refreshUser(); // 🔥 THIS IS THE MISSING PART
+                                    await userController.refreshUser();
                                   },
-
                                   onLogout: () async {
+                                    await _iotSub?.cancel();
+                                    await _alertHistorySub?.cancel();
+                                    _iotSub = null;
+                                    _alertHistorySub = null;
+                                    _connectedDeviceId = null;
                                     await userController.logout();
                                     if (!mounted) return;
                                     _goTo(AppScreen.login);
                                   },
-
                                   onDeleteAccount: () async {
+                                    await _iotSub?.cancel();
+                                    await _alertHistorySub?.cancel();
+                                    _iotSub = null;
+                                    _alertHistorySub = null;
+                                    _connectedDeviceId = null;
                                     await userController.deleteAccount();
                                     if (!mounted) return;
                                     _goTo(AppScreen.login);
@@ -557,22 +813,17 @@ class _AppShellState extends State<AppShell> {
                                   setState(() {
                                     _vehicleType = type;
                                     _vehicleNickname = nickname;
+                                    _customThresholds = thresholds;
                                   });
-                                  //sync update vehicle stuff sa firestore
-                                  final uid = firebase_auth
-                                      .FirebaseAuth
-                                      .instance
-                                      .currentUser
-                                      ?.uid;
-                                  if (uid != null) {
-                                    await FirebaseService.updateUserDocument(
-                                      uid,
-                                      {
-                                        'vehicleType': type.name,
-                                        'vehicleNickname': nickname,
-                                      },
-                                    );
-                                  }
+
+                                  final deviceId =
+                                      _connectedDeviceId ?? "RSD1";
+                                  await _iotController!.saveVehicleProfile(
+                                    deviceId: deviceId,
+                                    type: type,
+                                    nickname: nickname,
+                                    thresholds: thresholds,
+                                  );
                                 },
                               ),
                             ),
@@ -594,14 +845,22 @@ class _AppShellState extends State<AppShell> {
                                 tempUnit: _tempUnit,
                                 distanceUnit: _distanceUnit,
                                 onBack: () => _goTo(AppScreen.home),
-                                onNotificationsChanged: (v) =>
-                                    setState(() => _notificationsEnabled = v),
-                                onSoundChanged: (v) =>
-                                    setState(() => _soundEnabled = v),
-                                onTempUnitChanged: (u) =>
-                                    setState(() => _tempUnit = u),
-                                onDistanceUnitChanged: (u) =>
-                                    setState(() => _distanceUnit = u),
+                                onNotificationsChanged: (v) {
+                                  setState(() => _notificationsEnabled = v);
+                                  _saveUserSettingsToDb();
+                                },
+                                onSoundChanged: (v) {
+                                  setState(() => _soundEnabled = v);
+                                  _saveUserSettingsToDb();
+                                },
+                                onTempUnitChanged: (u) {
+                                  setState(() => _tempUnit = u);
+                                  _saveUserSettingsToDb();
+                                },
+                                onDistanceUnitChanged: (u) {
+                                  setState(() => _distanceUnit = u);
+                                  _saveUserSettingsToDb();
+                                },
                                 onUserInfoChanged: (info) =>
                                     setState(() => _userInfo = info),
                                 onGoToMyAccount: () =>
@@ -622,15 +881,17 @@ class _AppShellState extends State<AppShell> {
                             ),
 
                           if (_currentScreen == AppScreen.help)
-                            HelpInfoScreen(onBack: () => _goTo(AppScreen.home)),
+                            HelpInfoScreen(
+                              onBack: () => _goTo(AppScreen.home),
+                            ),
                         ],
                       ),
                     ),
                   ),
                 ),
               ),
-              //overlay layer
-              // //magdidisplay lang bottomnav if not on auth/onboarding screens
+
+              // Bottom nav overlay
               if (_currentScreen != AppScreen.login &&
                   _currentScreen != AppScreen.signup &&
                   _currentScreen != AppScreen.launch &&
@@ -646,62 +907,30 @@ class _AppShellState extends State<AppShell> {
                     onGoToMyAccount: () =>
                         _goToMyAccount(returnTo: _currentScreen),
                     onLogout: () async {
+                      await _iotSub?.cancel();
+                      await _alertHistorySub?.cancel();
+                      _iotSub = null;
+                      _alertHistorySub = null;
+                      _connectedDeviceId = null;
                       await userController.logout();
+                      if (!mounted) return;
+                      setState(() {
+                        _iotPaired = false;
+                        _iotConnected = false;
+                        _alerts = [];
+                        _sensorData = SensorData(
+                          floodLevel: 0,
+                          temperature: 0,
+                          timestamp: DateTime.now(),
+                        );
+                        _currentScreen = AppScreen.login;
+                      });
                     },
                   ),
                 ),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-//pag hinde pa gawa ang screen, ayan muna ang lalabas
-class _PlaceholderScreen extends StatelessWidget {
-  final String label;
-  final VoidCallback onBack;
-
-  const _PlaceholderScreen({required this.label, required this.onBack});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: AppColors.backgroundStart,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.construction, color: AppColors.accent, size: 48),
-          const SizedBox(height: 16),
-          Text(
-            '$label — Coming Soon',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'This screen hasn\'t been made yet.',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 24),
-          TextButton.icon(
-            onPressed: onBack,
-            icon: const Icon(Icons.arrow_back, color: AppColors.accent),
-            label: const Text(
-              'Back to Home',
-              style: TextStyle(color: AppColors.accent),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -5,16 +5,28 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'package:roadsense_unang_hirit/backend/controller/user.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp();
+
+  // 🔥 FORCE CORRECT REGION DATABASE
+  FirebaseDatabase.instanceFor(
+    app: Firebase.app(),
+    databaseURL:
+    "https://roadsense-3b3ea-default-rtdb.asia-southeast1.firebasedatabase.app",
+  );
+
   runApp(
     MultiProvider(
       providers: [ChangeNotifierProvider(create: (_) => UserController())],
       child: const RoadSenseApp(),
     ),
   );
+
 }
 
 class RoadSenseApp extends StatelessWidget {

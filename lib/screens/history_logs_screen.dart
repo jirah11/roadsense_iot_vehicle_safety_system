@@ -35,20 +35,23 @@ class _HistoryLogsScreenState extends State<HistoryLogsScreen> {
     final weekAgo = today.subtract(const Duration(days: 7));
     final monthAgo = today.subtract(const Duration(days: 30));
 
-
-    return widget.alerts.where((a) {
+    List<AlertModel> result = widget.alerts.where((a) {
       final d = a.timestamp;
       switch (_filter) {
         case 'today':
-          return d.isAfter(today.subtract(const Duration(days: 1)));
+          return !d.isBefore(today); // >= today at midnight
         case 'week':
-          return d.isAfter(weekAgo);
+          return !d.isBefore(weekAgo);
         case 'month':
-          return d.isAfter(monthAgo);
+          return !d.isBefore(monthAgo);
         default:
           return true;
       }
     }).toList();
+
+    // Always sort newest first
+    result.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return result;
   }
 
 

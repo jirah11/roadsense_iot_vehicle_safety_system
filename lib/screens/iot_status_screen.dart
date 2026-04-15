@@ -3,15 +3,16 @@ import 'package:google_fonts/google_fonts.dart';
 import '../app.dart';
 import '../app_theme.dart';
 import '../models/sensor_data.dart';
+import '../backend/service/iot.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 
-//mga pang-call if kunware, gusto mo siya ipunta sa screen, ganto ok?
 class IoTStatusScreen extends StatefulWidget {
-  final bool iotConnected; //nagsend ba ng data yung device currently?
-  final bool iotPaired; //nagsave ba sa profile ng user?
+  final bool iotConnected;
+  final bool iotPaired;
   final SensorData? sensorData;
   final TemperatureUnit tempUnit;
   final DistanceUnit distanceUnit;
-  //callback para matrigger yung connection logic sa app.dart
   final void Function({required String deviceId, required String password})
   onConnectDevice;
   final VoidCallback onDisconnect;
@@ -34,15 +35,44 @@ class IoTStatusScreen extends StatefulWidget {
 }
 
 class _IoTStatusScreenState extends State<IoTStatusScreen> {
-  //ensures connection modal and magpapop up once automatic
   bool _didPrompt = false;
-  final bool _obscurePassword = true;
 
-  //controller sa connection dialog text fields
   final TextEditingController _deviceIdCtrl = TextEditingController(
-    text: 'RoadSense-IoT',
+    text: 'RSD1',
   );
   final TextEditingController _passwordCtrl = TextEditingController();
+
+  // - - DB-LOADED DEVICE DATA - -
+  late final IoTService _iotService;
+
+  // From devices/{id}/info
+  String _serial = '—';
+  String _model = '—';
+  String _firmware = '—';
+
+  // From devices/{id}/status
+  int _batteryLevel = 0;
+  DateTime? _lastConnected;
+
+  bool _loadingDeviceInfo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _iotService = IoTService();
+    if (widget.iotPaired) {
+      _fetchDeviceInfo();
+    }
+  }
+
+  @override
+  void didUpdateWidget(IoTStatusScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-fetch when device becomes paired
+    if (!oldWidget.iotPaired && widget.iotPaired) {
+      _fetchDeviceInfo();
+    }
+  }
 
   @override
   void dispose() {
@@ -51,20 +81,91 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
     super.dispose();
   }
 
-  //"last updated" eme
-  String _formatLastSync() {
-    final lastSync = DateTime.now().subtract(const Duration(minutes: 2));
-    final diff = DateTime.now().difference(lastSync);
-    if (diff.inSeconds < 60) return '${diff.inSeconds} seconds ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} minutes ago';
-    if (diff.inHours < 24) return '${diff.inHours} hours ago';
-    return '${diff.inDays} days ago';
+  // ==============================
+  // FETCH DEVICE INFO + STATUS FROM DB
+  // ==============================
+  Future<void> _fetchDeviceInfo() async {
+    if (!mounted) return;
+    setState(() => _loadingDeviceInfo = true);
+
+    try {
+      // Use the deviceId from the text field controller (what was used to connect)
+      // Default to 'RSD1' since that's the known connected device
+      final deviceId = _deviceIdCtrl.text.trim().isNotEmpty
+          ? _deviceIdCtrl.text.trim()
+          : 'RSD1';
+
+      final data = await _iotService.getDevice(deviceId);
+      if (data == null || !mounted) return;
+
+      final info = data['info'] != null
+          ? Map<String, dynamic>.from(data['info'] as Map)
+          : <String, dynamic>{};
+
+      final status = data['status'] != null
+          ? Map<String, dynamic>.from(data['status'] as Map)
+          : <String, dynamic>{};
+
+      setState(() {
+        _serial = info['serial'] as String? ?? '—';
+        _model = info['model'] as String? ?? '—';
+        _firmware = info['firmware'] as String? ?? '—';
+
+        _batteryLevel = (status['battery_level'] ?? 0) is int
+            ? status['battery_level'] as int
+            : (status['battery_level'] as num?)?.toInt() ?? 0;
+
+        final rawTs = status['last_connected'];
+        if (rawTs != null) {
+          _lastConnected = rawTs is int
+              ? DateTime.fromMillisecondsSinceEpoch(rawTs)
+              : null;
+        }
+      });
+    } catch (e) {
+      debugPrint('❌ [IoTStatusScreen] _fetchDeviceInfo error: $e');
+    } finally {
+      if (mounted) setState(() => _loadingDeviceInfo = false);
+    }
   }
 
-  //placeholder lang siya, information kunware ng iot device
+  // ==============================
+  // FORMAT LAST SYNC FROM DB TIMESTAMP
+  // ==============================
+  String _formatLastSync() {
+    if (_lastConnected == null) return '—';
+    final diff = DateTime.now().difference(_lastConnected!);
+    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  // ==============================
+  // SENSOR FORMAT HELPERS
+  // ==============================
+  String _formatFloodReading() {
+    if (widget.sensorData == null) return 'N/A';
+    final useInches = widget.distanceUnit == DistanceUnit.inches;
+    final value = useInches
+        ? widget.sensorData!.floodLevel / 2.54
+        : widget.sensorData!.floodLevel;
+    final unit = useInches ? 'in' : 'cm';
+    return '${value.toStringAsFixed(1)} $unit';
+  }
+
+  String _formatTempReading() {
+    if (widget.sensorData == null) return 'N/A';
+    final useFahrenheit = widget.tempUnit == TemperatureUnit.fahrenheit;
+    final value = useFahrenheit
+        ? widget.sensorData!.temperature * 9 / 5 + 32
+        : widget.sensorData!.temperature;
+    final unit = useFahrenheit ? '°F' : '°C';
+    return '${value.toStringAsFixed(1)} $unit';
+  }
+
   @override
   Widget build(BuildContext context) {
-    //if yung device di pa paired, automatic magoopen yung connect modal
     if (!_didPrompt && !widget.iotPaired) {
       _didPrompt = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -73,19 +174,12 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
       });
     }
 
-    final deviceId = 'RS-IOT-2024-7891';
-    final deviceModel = 'RoadSense Pro X1';
-    final serialNumber = 'SN-45X-892-PLK';
-    final firmwareVersion = 'v2.4.1';
-    final signalStrength = 85;
-    final batteryLevel = 78;
-    final isCharging = widget.iotConnected && batteryLevel < 20 ? true : false;
-
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // - - HEADER - -
           Row(
             children: [
               IconButton(
@@ -120,6 +214,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
             ],
           ),
           const SizedBox(height: 24),
+
+          // - - CONNECT PROMPT (unpaired) - -
           if (!widget.iotPaired) ...[
             Container(
               width: double.infinity,
@@ -131,14 +227,14 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                   colors: [AppColors.cardDark, AppColors.cardDarker],
                 ),
                 borderRadius: BorderRadius.circular(24),
-                boxShadow: [
+                boxShadow: const [
                   BoxShadow(
                     color: Colors.black26,
                     blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    offset: Offset(0, 4),
                   ),
                 ],
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                border: Border.all(color: Colors.white12),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +245,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.10),
+                          color: Colors.white10,
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: const Icon(
@@ -207,6 +303,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
             ),
             const SizedBox(height: 24),
           ],
+
+          // - - CONNECTION STATUS CARD - -
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(24),
@@ -219,11 +317,11 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                     : [AppColors.rose, AppColors.roseDark],
               ),
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [
+              boxShadow: const [
                 BoxShadow(
                   color: Colors.black26,
                   blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  offset: Offset(0, 4),
                 ),
               ],
             ),
@@ -263,7 +361,9 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: widget.iotConnected ? Colors.white : Colors.white54,
+                    color: widget.iotConnected
+                        ? Colors.white
+                        : Colors.white54,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -271,6 +371,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
             ),
           ),
           const SizedBox(height: 16),
+
+          // - - PAIRED CONTENT - -
           if (widget.iotPaired) ...[
             SizedBox(
               width: double.infinity,
@@ -291,45 +393,66 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            _progressCard(
-              'Signal Strength',
-              'Network connection quality',
-              Icons.wifi,
-              signalStrength,
-              signalStrength >= 70
-                  ? AppColors.emerald
-                  : (signalStrength >= 40 ? AppColors.caution : AppColors.rose),
-              signalStrength >= 70
-                  ? 'Excellent'
-                  : (signalStrength >= 40 ? 'Good' : 'Poor'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _openConnectDeviceModal,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: Text(
+                  'Configure WiFi Connection',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                ),
+              ),
             ),
             const SizedBox(height: 16),
-            _progressCard(
+
+            // - - BATTERY - - (from DB)
+            _loadingDeviceInfo
+                ? _loadingPlaceholder()
+                : _progressCard(
               'Battery Level',
               'Device power status',
-              isCharging ? Icons.battery_charging_full : Icons.battery_std,
-              batteryLevel,
-              batteryLevel >= 60
+              _batteryLevel <= 20
+                  ? Icons.battery_alert
+                  : Icons.battery_std,
+              _batteryLevel,
+              _batteryLevel >= 60
                   ? AppColors.emerald
-                  : (batteryLevel >= 30 ? AppColors.caution : AppColors.rose),
-              batteryLevel >= 60
+                  : (_batteryLevel >= 30
+                  ? AppColors.caution
+                  : AppColors.rose),
+              _batteryLevel >= 60
                   ? 'Good'
-                  : (batteryLevel >= 30 ? 'Low' : 'Critical'),
+                  : (_batteryLevel >= 30 ? 'Low' : 'Critical'),
             ),
             const SizedBox(height: 24),
-            _infoCard(
+
+            // - - DEVICE INFO - - (from DB)
+            _loadingDeviceInfo
+                ? _loadingPlaceholder()
+                : _infoCard(
               'Device Information',
               'Hardware & software details',
               Icons.memory,
               [
-                _row('Device ID', deviceId, Icons.tag),
-                _row('Device Model', deviceModel, Icons.memory),
-                _row('Serial Number', serialNumber, Icons.tag),
-                _row('Firmware Version', firmwareVersion, Icons.verified_user),
+                _row('Device ID', _deviceIdCtrl.text.trim(), Icons.tag),
+                _row('Device Model', _model, Icons.memory),
+                _row('Serial Number', _serial, Icons.tag),
+                _row(
+                    'Firmware Version', _firmware, Icons.verified_user),
                 _row('Last Sync', _formatLastSync(), Icons.refresh),
               ],
             ),
             const SizedBox(height: 24),
+
+            // - - SENSOR STATUS - -
             Text(
               'Sensor Status',
               style: GoogleFonts.inter(
@@ -363,7 +486,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                   colors: [AppColors.cardDark, AppColors.cardDarker],
                 ),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                border: Border.all(color: Colors.white12),
               ),
               child: Text(
                 'Connect your IoT device to view battery health, device information, and sensor status.',
@@ -376,28 +499,32 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
     );
   }
 
-  //sensor status
-  // random values tas numbers muna since wala pa orig data
-  String _formatFloodReading() {
-    if (widget.sensorData == null) return 'N/A';
-    final useInches = widget.distanceUnit == DistanceUnit.inches;
-    final value = useInches
-        ? widget.sensorData!.floodLevel / 2.54
-        : widget.sensorData!.floodLevel;
-    final unit = useInches ? 'in' : 'cm';
-    return '${value.toStringAsFixed(1)} $unit';
+  // ==============================
+  // LOADING PLACEHOLDER
+  // ==============================
+  Widget _loadingPlaceholder() {
+    return Container(
+      width: double.infinity,
+      height: 80,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.cardDark, AppColors.cardDarker],
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Center(
+        child: CircularProgressIndicator(
+          color: AppColors.accent,
+          strokeWidth: 2,
+        ),
+      ),
+    );
   }
 
-  String _formatTempReading() {
-    if (widget.sensorData == null) return 'N/A';
-    final useFahrenheit = widget.tempUnit == TemperatureUnit.fahrenheit;
-    final value = useFahrenheit
-        ? widget.sensorData!.temperature * 9 / 5 + 32
-        : widget.sensorData!.temperature;
-    final unit = useFahrenheit ? '°F' : '°C';
-    return '${value.toStringAsFixed(1)} $unit';
-  }
-
+  // ==============================
+  // DISCONNECT DIALOG
+  // ==============================
   Future<void> _openDisconnectConfirm() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -415,7 +542,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                 colors: [Color(0xFF2B3E54), Color(0xFF213448)],
               ),
               borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+              border: Border.all(color: Colors.white10),
               boxShadow: const [
                 BoxShadow(
                   color: Colors.black54,
@@ -462,7 +589,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(dialogContext, false),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.10),
+                          backgroundColor: Colors.white10,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -472,7 +599,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                         ),
                         child: Text(
                           'Cancel',
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                          style:
+                          GoogleFonts.inter(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
@@ -490,7 +618,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                         ),
                         child: Text(
                           'Disconnect',
-                          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                          style:
+                          GoogleFonts.inter(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
@@ -504,15 +633,19 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
     );
     if (confirmed == true && mounted) {
       widget.onDisconnect();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('IoT device disconnected')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('IoT device disconnected')),
+      );
     }
   }
 
+  // ==============================
+  // CONNECT DIALOG
+  // ==============================
   Future<void> _openConnectDeviceModal() async {
     var obscurePassword = true;
     final messenger = ScaffoldMessenger.of(context);
+
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -531,9 +664,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                     colors: [Color(0xFF2B3E54), Color(0xFF213448)],
                   ),
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.10),
-                  ),
+                  border: Border.all(color: Colors.white10),
                   boxShadow: const [
                     BoxShadow(
                       color: Colors.black54,
@@ -560,7 +691,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                         ),
                         IconButton(
                           onPressed: () => Navigator.pop(dialogContext),
-                          icon: const Icon(Icons.close, color: Colors.white54),
+                          icon:
+                          const Icon(Icons.close, color: Colors.white54),
                         ),
                       ],
                     ),
@@ -575,27 +707,23 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                       style: GoogleFonts.inter(color: Colors.white),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.06),
-                        hintText: 'RoadSense-IoT',
+                        fillColor: Colors.white10,
+                        hintText: 'RSD1',
                         hintStyle: GoogleFonts.inter(color: Colors.white38),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.18),
-                          ),
+                          borderSide:
+                          const BorderSide(color: Colors.white24),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.16),
-                          ),
+                          borderSide:
+                          const BorderSide(color: Colors.white24),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
                           borderSide: const BorderSide(
-                            color: AppColors.accent,
-                            width: 2,
-                          ),
+                              color: AppColors.accent, width: 2),
                         ),
                       ),
                     ),
@@ -611,32 +739,27 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                       style: GoogleFonts.inter(color: Colors.white),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.06),
-                        hintText: 'Enter WiFi password',
+                        fillColor: Colors.white10,
+                        hintText: 'Enter device password',
                         hintStyle: GoogleFonts.inter(color: Colors.white38),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.18),
-                          ),
+                          borderSide:
+                          const BorderSide(color: Colors.white24),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.16),
-                          ),
+                          borderSide:
+                          const BorderSide(color: Colors.white24),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
                           borderSide: const BorderSide(
-                            color: AppColors.accent,
-                            width: 2,
-                          ),
+                              color: AppColors.accent, width: 2),
                         ),
                         suffixIcon: IconButton(
                           onPressed: () => setModalState(
-                                () => obscurePassword = !obscurePassword,
-                          ),
+                                  () => obscurePassword = !obscurePassword),
                           icon: Icon(
                             obscurePassword
                                 ? Icons.visibility_off
@@ -653,11 +776,10 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                           child: ElevatedButton(
                             onPressed: () => Navigator.pop(dialogContext),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.10,
-                              ),
+                              backgroundColor: Colors.white10,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding:
+                              const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -666,8 +788,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                             child: Text(
                               'Cancel',
                               style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w700,
-                              ),
+                                  fontWeight: FontWeight.w700),
                             ),
                           ),
                         ),
@@ -675,24 +796,30 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                         Expanded(
                           child: ElevatedButton(
                             onPressed: () {
+                              final deviceId =
+                              _deviceIdCtrl.text.trim();
+                              final password = _passwordCtrl.text;
                               widget.onConnectDevice(
-                                deviceId: _deviceIdCtrl.text.trim(),
-                                password: _passwordCtrl.text,
+                                deviceId: deviceId,
+                                password: password,
                               );
                               Navigator.pop(dialogContext);
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                              // Fetch fresh device info after connect
+                              WidgetsBinding.instance
+                                  .addPostFrameCallback((_) {
                                 if (!mounted) return;
+                                _fetchDeviceInfo();
                                 messenger.showSnackBar(
                                   const SnackBar(
-                                    content: Text('Device connected'),
-                                  ),
+                                      content: Text('Connecting...')),
                                 );
                               });
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.emerald,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding:
+                              const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -700,8 +827,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                             child: Text(
                               'Connect',
                               style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w700,
-                              ),
+                                  fontWeight: FontWeight.w700),
                             ),
                           ),
                         ),
@@ -717,6 +843,9 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
     );
   }
 
+  // ==============================
+  // WIDGETS
+  // ==============================
   Widget _progressCard(
       String title,
       String subtitle,
@@ -734,12 +863,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
           colors: [AppColors.cardDark, AppColors.cardDarker],
         ),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -751,7 +876,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: Colors.white10,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: Colors.white, size: 22),
@@ -761,43 +886,31 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: Colors.white60,
-                      ),
-                    ),
+                    Text(title,
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white)),
+                    Text(subtitle,
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: Colors.white60)),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [color, color.withValues(alpha: 0.8)],
+                    colors: [color, color.withOpacity(0.8)],
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   label,
                   style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
               ),
             ],
@@ -806,22 +919,19 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Strength', style: GoogleFonts.inter(color: Colors.white70)),
-              Text(
-                '$value%',
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
+              Text('Level',
+                  style: GoogleFonts.inter(color: Colors.white70)),
+              Text('$value%',
+                  style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600, color: Colors.white)),
             ],
           ),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: value / 100,
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              value: (value / 100).clamp(0.0, 1.0),
+              backgroundColor: Colors.white10,
               valueColor: AlwaysStoppedAnimation<Color>(color),
               minHeight: 12,
             ),
@@ -846,12 +956,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
           colors: [AppColors.cardDark, AppColors.cardDarker],
         ),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -863,7 +969,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: Colors.white10,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: Colors.white, size: 22),
@@ -872,20 +978,12 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: Colors.white60,
-                    ),
-                  ),
+                  Text(title,
+                      style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600, color: Colors.white)),
+                  Text(subtitle,
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: Colors.white60)),
                 ],
               ),
             ],
@@ -904,19 +1002,14 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
         children: [
           Icon(icon, size: 16, color: Colors.white60),
           const SizedBox(width: 8),
-          Text(
-            label,
-            style: GoogleFonts.inter(fontSize: 14, color: Colors.white70),
-          ),
+          Text(label,
+              style: GoogleFonts.inter(fontSize: 14, color: Colors.white70)),
           const Spacer(),
-          Text(
-            value,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
+          Text(value,
+              style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white)),
         ],
       ),
     );
@@ -937,12 +1030,8 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
           colors: [AppColors.cardDarker, Color(0xFF2F3D54)],
         ),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
       child: Column(
@@ -954,7 +1043,7 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
+                  color: Colors.white10,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: Colors.white, size: 22),
@@ -964,86 +1053,65 @@ class _IoTStatusScreenState extends State<IoTStatusScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: Colors.white60,
-                      ),
-                    ),
+                    Text(title,
+                        style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white)),
+                    Text(subtitle,
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: Colors.white60)),
                   ],
                 ),
               ),
-              if (widget.iotConnected)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.emerald,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Active',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Offline',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white70,
-                    ),
-                  ),
+              widget.iotConnected
+                  ? Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.emerald,
+                  borderRadius: BorderRadius.circular(20),
                 ),
+                child: Text('Active',
+                    style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
+              )
+                  : Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('Offline',
+                    style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white70)),
+              ),
             ],
           ),
           const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
+              color: Colors.white10,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Current Reading:',
-                  style: GoogleFonts.inter(fontSize: 14, color: Colors.white70),
-                ),
-                Text(
-                  value,
-                  style: GoogleFonts.inter(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+                Text('Current Reading:',
+                    style:
+                    GoogleFonts.inter(fontSize: 14, color: Colors.white70)),
+                Text(value,
+                    style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white)),
               ],
             ),
           ),

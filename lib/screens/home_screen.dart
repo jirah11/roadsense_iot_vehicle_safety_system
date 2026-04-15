@@ -210,7 +210,7 @@ class HomeScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: _SensorCard(
-                  title: 'Flood Level',
+                  title: 'Flood Distance',
                   value: displayFlood.toStringAsFixed(1),
                   unit: floodUnit,
                   status: floodStatus,

@@ -1,3 +1,4 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:roadsense_unang_hirit/app.dart';
@@ -5,15 +6,22 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'package:roadsense_unang_hirit/backend/controller/user.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'backend/service/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await Firebase.initializeApp();
 
-  // 🔥 FORCE CORRECT REGION DATABASE
+  // Initialize Firebase ONCE — remove the duplicate await Firebase.initializeApp()
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // MUST be registered before runApp, and before NotificationService.init()
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+  // Init notifications (requests permission, sets up channel, foreground listener)
+  await NotificationService().init();
+
+  // Force correct RTDB region
   FirebaseDatabase.instanceFor(
     app: Firebase.app(),
     databaseURL:
@@ -26,7 +34,6 @@ void main() async {
       child: const RoadSenseApp(),
     ),
   );
-
 }
 
 class RoadSenseApp extends StatelessWidget {

@@ -21,32 +21,34 @@ class VehicleThresholds {
     required this.tempDanger,
   });
 
+// CORRECT: danger distance is LOWER than caution distance
+// sedan: caution when within 30cm, danger when within 15cm
   static const VehicleThresholds sedan = VehicleThresholds(
-      floodCaution: 20,
-      floodDanger: 35,
-      tempCaution: 40,
-      tempDanger: 50,
+    floodCaution: 30,   // warn when sensor reads ≤ 30cm
+    floodDanger: 15,    // danger when sensor reads ≤ 15cm (water very close)
+    tempCaution: 40,
+    tempDanger: 50,
   );
 
   static const VehicleThresholds suv = VehicleThresholds(
-      floodCaution: 30,
-      floodDanger: 50,
-      tempCaution: 45,
-      tempDanger: 55,
+    floodCaution: 40,
+    floodDanger: 20,
+    tempCaution: 45,
+    tempDanger: 55,
   );
 
   static const VehicleThresholds hatchback = VehicleThresholds(
-      floodCaution: 18,
-      floodDanger: 30,
-      tempCaution: 38,
-      tempDanger: 48,
+    floodCaution: 28,
+    floodDanger: 12,
+    tempCaution: 38,
+    tempDanger: 48,
   );
 
   static const VehicleThresholds coupe = VehicleThresholds(
-      floodCaution: 15,
-      floodDanger: 28,
-      tempCaution: 48,
-      tempDanger: 50,
+    floodCaution: 25,
+    floodDanger: 10,
+    tempCaution: 40,
+    tempDanger: 50,
   );
 
   static VehicleThresholds forType(VehicleType type) {

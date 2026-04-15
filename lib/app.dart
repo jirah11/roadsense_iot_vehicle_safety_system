@@ -61,6 +61,8 @@ class _AppShellState extends State<AppShell> {
   late List<AlertModel> _alerts;
   late bool _iotConnected;
   late bool _iotPaired;
+  bool _hasLinkedDevice = false;  // ✅ correct location — class level
+
 
   bool _notificationsEnabled = true;
   bool _soundEnabled = true;
@@ -113,6 +115,7 @@ class _AppShellState extends State<AppShell> {
           await _loadVehicleProfileFromDb("RSD1");
           await _loadUserSettingsFromDb(uid);
           _connectedDeviceId = "RSD1";
+          setState(() => _hasLinkedDevice = true);  // add this
           _attachDeviceStream("RSD1");
           _attachAlertHistoryStream("RSD1");
           // User already authenticated (app restart), save token now
@@ -297,28 +300,29 @@ class _AppShellState extends State<AppShell> {
       onError: (e) => debugPrint("❌ [ALERT STREAM ERROR]: $e"),
     );
   }
-
   void _checkAlerts() {
     if (!_iotLive) return;
     final thresholds = _thresholds;
     final newAlerts = <AlertModel>[];
 
-    if (_sensorData.floodLevel >= thresholds.floodDanger) {
+    // FLOOD: lower distance = more dangerous
+    if (_sensorData.floodLevel <= thresholds.floodDanger) {
       newAlerts.add(AlertModel(
         id: 'flood-danger-${DateTime.now().millisecondsSinceEpoch}',
         type: AlertType.flood, severity: AlertSeverity.danger,
         message: 'DANGER: High flood level detected! Avoid this area.',
         timestamp: DateTime.now(), value: _sensorData.floodLevel, acknowledged: false,
       ));
-    } else if (_sensorData.floodLevel >= thresholds.floodCaution) {
+    } else if (_sensorData.floodLevel <= thresholds.floodCaution) {
       newAlerts.add(AlertModel(
         id: 'flood-caution-${DateTime.now().millisecondsSinceEpoch}',
         type: AlertType.flood, severity: AlertSeverity.caution,
         message: 'CAUTION: Moderate flood level detected. Drive carefully.',
         timestamp: DateTime.now(), value: _sensorData.floodLevel, acknowledged: false,
       ));
-    }
+    } // ← this closing brace was missing before
 
+    // TEMPERATURE
     if (_sensorData.temperature >= thresholds.tempDanger) {
       newAlerts.add(AlertModel(
         id: 'temp-danger-${DateTime.now().millisecondsSinceEpoch}',
@@ -347,7 +351,6 @@ class _AppShellState extends State<AppShell> {
 
     if (toAdd.isEmpty) return;
 
-    // Save to Firebase
     if (_connectedDeviceId != null) {
       for (final alert in toAdd) {
         _iotController!.saveAlert(
@@ -362,7 +365,6 @@ class _AppShellState extends State<AppShell> {
       }
     }
 
-    // FIX: notifications fired HERE, inside _checkAlerts, where toAdd exists
     if (_notificationsEnabled) {
       for (final alert in toAdd) {
         final isCritical = alert.severity == AlertSeverity.danger;
@@ -378,13 +380,14 @@ class _AppShellState extends State<AppShell> {
   void _onConnectIotDevice({required String deviceId, required String password}) async {
     try {
       debugPrint("🔌 [CONNECT] START → $deviceId");
+
       if (_iotController == null) { debugPrint("❌ IoTController NOT initialized"); return; }
 
       await _iotController!.connectDevice(deviceId: deviceId, password: password);
       if (!mounted) return;
 
       _connectedDeviceId = deviceId;
-      setState(() { _iotPaired = true; _iotConnected = true; });
+      setState(() { _iotPaired = true; _iotConnected = true; _hasLinkedDevice = true; });
 
       await _loadVehicleProfileFromDb(deviceId);
       _attachDeviceStream(deviceId);
@@ -416,8 +419,10 @@ class _AppShellState extends State<AppShell> {
 
       setState(() {
         _iotPaired = false; _iotConnected = false; _alerts = [];
+        _hasLinkedDevice = false;  // add this
         _sensorData = SensorData(floodLevel: 0, temperature: 0, timestamp: DateTime.now());
       });
+
       _connectedDeviceId = null;
     } catch (e) {
       debugPrint("❌ [DISCONNECT ERROR]: $e");
@@ -516,6 +521,7 @@ class _AppShellState extends State<AppShell> {
                                     await _loadVehicleProfileFromDb("RSD1");
                                     await _loadUserSettingsFromDb(uid);
                                     _connectedDeviceId = "RSD1";
+                                    setState(() => _hasLinkedDevice = true);  // add this
                                     _attachDeviceStream("RSD1");
                                     _attachAlertHistoryStream("RSD1");
                                     // FIX: save FCM token after uid is available
@@ -551,6 +557,7 @@ class _AppShellState extends State<AppShell> {
                                     await _loadVehicleProfileFromDb("RSD1");
                                     await _loadUserSettingsFromDb(uid);
                                     _connectedDeviceId = "RSD1";
+                                    setState(() => _hasLinkedDevice = true);  // add this
                                     _attachDeviceStream("RSD1");
                                     _attachAlertHistoryStream("RSD1");
                                     // FIX: save FCM token after uid is available
@@ -606,6 +613,7 @@ class _AppShellState extends State<AppShell> {
                               sensorData: _sensorData, thresholds: _thresholds,
                               vehicleNickname: _vehicleNickname, activeAlerts: _activeAlerts,
                               iotConnected: _iotConnected, iotLive: _iotLive,
+                              hasLinkedDevice: _hasLinkedDevice, // ← add this
                               tempUnit: _tempUnit, distanceUnit: _distanceUnit,
                               onNavigate: _goTo,
                             ),
@@ -711,6 +719,7 @@ class _AppShellState extends State<AppShell> {
                       if (!mounted) return;
                       setState(() {
                         _iotPaired = false; _iotConnected = false; _alerts = [];
+                        _hasLinkedDevice = false;  // add this
                         _sensorData = SensorData(floodLevel: 0, temperature: 0, timestamp: DateTime.now());
                         _currentScreen = AppScreen.login;
                       });

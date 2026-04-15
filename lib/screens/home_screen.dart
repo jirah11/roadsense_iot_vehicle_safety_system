@@ -11,6 +11,7 @@ class HomeScreen extends StatelessWidget {
   final List<AlertModel> activeAlerts;
   final bool iotConnected;
   final bool iotLive;
+  final bool hasLinkedDevice;
   final TemperatureUnit tempUnit;
   final DistanceUnit distanceUnit;
   final ValueChanged<AppScreen> onNavigate;
@@ -23,37 +24,41 @@ class HomeScreen extends StatelessWidget {
     required this.activeAlerts,
     required this.iotConnected,
     required this.iotLive,
+    required this.hasLinkedDevice,
     required this.tempUnit,
     required this.distanceUnit,
     required this.onNavigate,
   });
 
-  // 'SAFE', 'CAUTION', 'DANGER' para sa flood level
+  // FLOOD: lower distance = water higher = more dangerous
   String _floodStatus() {
-    if (sensorData.floodLevel >= thresholds.floodDanger) return 'DANGER';
-    if (sensorData.floodLevel >= thresholds.floodCaution) return 'CAUTION';
+    if (sensorData.floodLevel <= thresholds.floodDanger) return 'DANGER';
+    if (sensorData.floodLevel <= thresholds.floodCaution) return 'CAUTION';
     return 'SAFE';
   }
 
-  //'SAFE', 'CAUTION', 'DANGER' para sa temperature
   String _tempStatus() {
     if (sensorData.temperature >= thresholds.tempDanger) return 'DANGER';
     if (sensorData.temperature >= thresholds.tempCaution) return 'CAUTION';
     return 'SAFE';
   }
 
-  // display color sa caution tas danger
   Color _statusColor(String status) {
     if (status == 'DANGER') return AppColors.rose;
     if (status == 'CAUTION') return AppColors.caution;
     return AppColors.emerald;
   }
 
-  // progress bar fill (0.0 - 1.0) sa flood tas temperature
-  double _floodPercent() => (sensorData.floodLevel / 60).clamp(0.0, 1.0);
+  // Flood progress: 0.0 = sensor max range (safe/no water), 1.0 = sensor min (flooded)
+  // We invert: lower reading = higher fill
+  double _floodPercent() {
+    const double maxRange = 400.0; // typical ultrasonic max in cm
+    final inverted = (maxRange - sensorData.floodLevel) / maxRange;
+    return inverted.clamp(0.0, 1.0);
+  }
+
   double _tempPercent() => ((sensorData.temperature - 20) / 40).clamp(0.0, 1.0);
 
-  // format sa sensor timestamp from hh:mm:ss AM/PM
   String _lastUpdated() {
     final t = sensorData.timestamp;
     final hour = t.hour > 12 ? t.hour - 12 : (t.hour == 0 ? 12 : t.hour);
@@ -68,11 +73,9 @@ class HomeScreen extends StatelessWidget {
     final floodStatus = iotLive ? _floodStatus() : '—';
     final tempStatus = iotLive ? _tempStatus() : '—';
 
-    // convert display units
     final bool useInches = distanceUnit == DistanceUnit.inches;
     final bool useFahrenheit = tempUnit == TemperatureUnit.fahrenheit;
 
-    //chinecheck if live yung iot kasi if disconnected, iba makikita
     final double displayFlood = iotLive
         ? (useInches ? sensorData.floodLevel / 2.54 : sensorData.floodLevel)
         : 0;
@@ -85,29 +88,29 @@ class HomeScreen extends StatelessWidget {
         : 0;
     final String tempUnitLabel = useFahrenheit ? '°F' : '°C';
 
-    // threshold labels
+    // Threshold labels — for flood, lower = danger so show accordingly
     String floodCautionLabel;
     String floodDangerLabel;
     if (useInches) {
       floodCautionLabel =
-      'Caution: ${(thresholds.floodCaution / 2.54).toStringAsFixed(1)}in';
+      '≤${(thresholds.floodCaution / 2.54).toStringAsFixed(1)}in caution';
       floodDangerLabel =
-      'Danger: ${(thresholds.floodDanger / 2.54).toStringAsFixed(1)}in';
+      '≤${(thresholds.floodDanger / 2.54).toStringAsFixed(1)}in danger';
     } else {
-      floodCautionLabel = 'Caution: ${thresholds.floodCaution}cm';
-      floodDangerLabel = 'Danger: ${thresholds.floodDanger}cm';
+      floodCautionLabel = '≤${thresholds.floodCaution}cm caution';
+      floodDangerLabel = '≤${thresholds.floodDanger}cm danger';
     }
 
     String tempCautionLabel;
     String tempDangerLabel;
     if (useFahrenheit) {
       tempCautionLabel =
-      'Caution: ${(thresholds.tempCaution * 9 / 5 + 32).toStringAsFixed(1)}°F';
+      '≥${(thresholds.tempCaution * 9 / 5 + 32).toStringAsFixed(1)}°F caution';
       tempDangerLabel =
-      'Danger: ${(thresholds.tempDanger * 9 / 5 + 32).toStringAsFixed(1)}°F';
+      '≥${(thresholds.tempDanger * 9 / 5 + 32).toStringAsFixed(1)}°F danger';
     } else {
-      tempCautionLabel = 'Caution: ${thresholds.tempCaution}°C';
-      tempDangerLabel = 'Danger: ${thresholds.tempDanger}°C';
+      tempCautionLabel = '≥${thresholds.tempCaution}°C caution';
+      tempDangerLabel = '≥${thresholds.tempDanger}°C danger';
     }
 
     return SingleChildScrollView(
@@ -121,8 +124,14 @@ class HomeScreen extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('RoadSense', style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
-                  Text('Vehicle Safety Monitor', style: GoogleFonts.inter(fontSize: 14, color: AppColors.accent)),
+                  Text('RoadSense',
+                      style: GoogleFonts.inter(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white)),
+                  Text('Vehicle Safety Monitor',
+                      style:
+                      GoogleFonts.inter(fontSize: 14, color: AppColors.accent)),
                 ],
               ),
               Row(
@@ -133,24 +142,88 @@ class HomeScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: iotConnected ? AppColors.emerald : AppColors.rose,
                       shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: (iotConnected ? AppColors.emerald : AppColors.rose).withValues(alpha: 0.6), blurRadius: 6)],
+                      boxShadow: [
+                        BoxShadow(
+                            color: (iotConnected
+                                ? AppColors.emerald
+                                : AppColors.rose)
+                                .withValues(alpha: 0.6),
+                            blurRadius: 6)
+                      ],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(iotConnected ? 'Connected' : 'Offline', style: GoogleFonts.inter(fontSize: 12, color: AppColors.accent)),
+                  Text(iotConnected ? 'Connected' : 'Offline',
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: AppColors.accent)),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 24),
-          if (!iotLive)
+
+          // No device linked — prompt to connect
+          if (!hasLinkedDevice)
+            GestureDetector(
+              onTap: () => onNavigate(AppScreen.iotStatus),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.5),
+                      AppColors.cardDark.withValues(alpha: 0.9),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.wifi_find, color: AppColors.accent, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('No device connected',
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white)),
+                          Text('Tap to connect your RoadSense IoT device',
+                              style: GoogleFonts.inter(
+                                  fontSize: 12, color: Colors.white70)),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios,
+                        color: AppColors.accent, size: 16),
+                  ],
+                ),
+              ),
+            ),
+
+          // Device linked but not live (offline)
+          if (hasLinkedDevice && !iotLive)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.cardDark.withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                border:
+                Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
               child: Row(
                 children: [
@@ -158,14 +231,19 @@ class HomeScreen extends StatelessWidget {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'IoT device is not connected yet. Connect from IoT Status to see live readings and alerts.',
-                      style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, height: 1.35),
+                      'IoT device is offline. Check your device connection.',
+                      style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: Colors.white70,
+                          height: 1.35),
                     ),
                   ),
                 ],
               ),
             ),
+
           if (!iotLive) const SizedBox(height: 24),
+
           if (activeAlerts.isNotEmpty)
             GestureDetector(
               onTap: () => onNavigate(AppScreen.alerts),
@@ -176,36 +254,59 @@ class HomeScreen extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [AppColors.rose.withValues(alpha: 0.5), AppColors.roseDark.withValues(alpha: 0.5)],
+                    colors: [
+                      AppColors.rose.withValues(alpha: 0.5),
+                      AppColors.roseDark.withValues(alpha: 0.5)
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.rose.withValues(alpha: 0.3)),
-                  boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12, offset: const Offset(0, 4))],
+                  border:
+                  Border.all(color: AppColors.rose.withValues(alpha: 0.3)),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 12,
+                        offset: Offset(0, 4))
+                  ],
                 ),
                 child: Row(
                   children: [
                     Container(
                       width: 40,
                       height: 40,
-                      decoration: BoxDecoration(color: AppColors.rose, borderRadius: BorderRadius.circular(12)),
-                      child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 22),
+                      decoration: BoxDecoration(
+                          color: AppColors.rose,
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.warning_amber_rounded,
+                          color: Colors.white, size: 22),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${activeAlerts.length} Active Alert${activeAlerts.length > 1 ? 's' : ''}', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: Colors.white)),
-                          Text('Tap to view details', style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
+                          Text(
+                              '${activeAlerts.length} Active Alert${activeAlerts.length > 1 ? 's' : ''}',
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white)),
+                          Text('Tap to view details',
+                              style: GoogleFonts.inter(
+                                  fontSize: 12, color: Colors.white70)),
                         ],
                       ),
                     ),
-                    Text('View', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.rose)),
+                    Text('View',
+                        style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.rose)),
                   ],
                 ),
               ),
             ),
           if (activeAlerts.isNotEmpty) const SizedBox(height: 24),
+
           Row(
             children: [
               Expanded(
@@ -214,7 +315,8 @@ class HomeScreen extends StatelessWidget {
                   value: displayFlood.toStringAsFixed(1),
                   unit: floodUnit,
                   status: floodStatus,
-                  statusColor: iotLive ? _statusColor(_floodStatus()) : Colors.white38,
+                  statusColor:
+                  iotLive ? _statusColor(_floodStatus()) : Colors.white38,
                   progress: iotLive ? _floodPercent() : 0,
                   cautionLabel: floodCautionLabel,
                   dangerLabel: floodDangerLabel,
@@ -228,7 +330,8 @@ class HomeScreen extends StatelessWidget {
                   value: displayTemp.toStringAsFixed(1),
                   unit: tempUnitLabel,
                   status: tempStatus,
-                  statusColor: iotLive ? _statusColor(_tempStatus()) : Colors.white38,
+                  statusColor:
+                  iotLive ? _statusColor(_tempStatus()) : Colors.white38,
                   progress: iotLive ? _tempPercent() : 0,
                   cautionLabel: tempCautionLabel,
                   dangerLabel: tempDangerLabel,
@@ -241,23 +344,45 @@ class HomeScreen extends StatelessWidget {
           Center(
             child: Text(
               iotLive ? 'Last updated: ${_lastUpdated()}' : 'Last updated: —',
-              style: GoogleFonts.inter(fontSize: 12, color: Colors.white38),
+              style:
+              GoogleFonts.inter(fontSize: 12, color: Colors.white38),
             ),
           ),
           const SizedBox(height: 24),
           Row(
             children: [
-              Expanded(child: _NavCard(title: 'Alerts', subtitle: 'View warnings', icon: Icons.warning_amber_rounded, badge: activeAlerts.length, onTap: () => onNavigate(AppScreen.alerts))),
+              Expanded(
+                  child: _NavCard(
+                      title: 'Alerts',
+                      subtitle: 'View warnings',
+                      icon: Icons.warning_amber_rounded,
+                      badge: activeAlerts.length,
+                      onTap: () => onNavigate(AppScreen.alerts))),
               const SizedBox(width: 16),
-              Expanded(child: _NavCard(title: 'Vehicle', subtitle: 'Profile settings', icon: Icons.directions_car, onTap: () => onNavigate(AppScreen.vehicle))),
+              Expanded(
+                  child: _NavCard(
+                      title: 'Vehicle',
+                      subtitle: 'Profile settings',
+                      icon: Icons.directions_car,
+                      onTap: () => onNavigate(AppScreen.vehicle))),
             ],
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _NavCard(title: 'History', subtitle: 'Past alerts', icon: Icons.history, onTap: () => onNavigate(AppScreen.history))),
+              Expanded(
+                  child: _NavCard(
+                      title: 'History',
+                      subtitle: 'Past alerts',
+                      icon: Icons.history,
+                      onTap: () => onNavigate(AppScreen.history))),
               const SizedBox(width: 16),
-              Expanded(child: _NavCard(title: 'IoT Status', subtitle: 'Device info', icon: Icons.wifi, onTap: () => onNavigate(AppScreen.iotStatus))),
+              Expanded(
+                  child: _NavCard(
+                      title: 'IoT Status',
+                      subtitle: 'Device info',
+                      icon: Icons.wifi,
+                      onTap: () => onNavigate(AppScreen.iotStatus))),
             ],
           ),
           const SizedBox(height: 24),
@@ -274,7 +399,11 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   Icon(Icons.help_outline, color: AppColors.accent, size: 22),
                   const SizedBox(height: 8),
-                  Text('Help & Info', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white)),
+                  Text('Help & Info',
+                      style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white)),
                 ],
               ),
             ),
@@ -284,8 +413,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-
-// sensor cards, yung nakukuha from iot device dito magdidisplay
 
 class _SensorCard extends StatelessWidget {
   final String title;
@@ -315,7 +442,7 @@ class _SensorCard extends StatelessWidget {
     return AspectRatio(
       aspectRatio: 1,
       child: Container(
-        padding: const EdgeInsets.all(14), // was 20
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
@@ -323,7 +450,10 @@ class _SensorCard extends StatelessWidget {
             colors: [AppColors.cardDark, AppColors.cardDarker],
           ),
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 12, offset: const Offset(0, 4))],
+          boxShadow: const [
+            BoxShadow(
+                color: Colors.black26, blurRadius: 12, offset: Offset(0, 4))
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,52 +471,62 @@ class _SensorCard extends StatelessWidget {
                   child: Icon(icon, color: Colors.white, size: 18),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusColor,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(status,
                       style: GoogleFonts.inter(
-                          fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white)),
                 ),
               ],
             ),
             const Spacer(),
             Text(title,
                 style: GoogleFonts.inter(
-                    fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white)),
             const SizedBox(height: 8),
             Center(
               child: RichText(
                 text: TextSpan(
                   style: GoogleFonts.inter(
-                      fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white), // was 32
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                   children: [
                     TextSpan(text: value),
-                    TextSpan(text: unit, style: GoogleFonts.inter(fontSize: 28)), // was 18
+                    TextSpan(
+                        text: unit, style: GoogleFonts.inter(fontSize: 28)),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 12), // was 8
+            const SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: progress,
                 backgroundColor: Colors.white.withValues(alpha: 0.1),
                 valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-                minHeight: 6, // was 8
+                minHeight: 6,
               ),
             ),
-            const SizedBox(height: 4), // was 8
+            const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(cautionLabel,
-                    style: GoogleFonts.inter(fontSize: 9, color: Colors.white38)), // was 10
+                    style: GoogleFonts.inter(
+                        fontSize: 9, color: Colors.white38)),
                 Text(dangerLabel,
-                    style: GoogleFonts.inter(fontSize: 9, color: Colors.white38)), // was 10
+                    style: GoogleFonts.inter(
+                        fontSize: 9, color: Colors.white38)),
               ],
             ),
           ],
@@ -395,8 +535,6 @@ class _SensorCard extends StatelessWidget {
     );
   }
 }
-
-// navigation clickable cards sa homescreen
 
 class _NavCard extends StatelessWidget {
   final String title;
@@ -428,16 +566,12 @@ class _NavCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           boxShadow: const [
             BoxShadow(
-              color: Colors.black26,
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            ),
+                color: Colors.black26, blurRadius: 12, offset: Offset(0, 4))
           ],
         ),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // red badge dot pag may unread alerts
             if (badge > 0)
               Positioned(
                 top: -4,
@@ -445,17 +579,12 @@ class _NavCard extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(6),
                   decoration: const BoxDecoration(
-                    color: AppColors.rose,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(
-                    '$badge',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
+                      color: AppColors.rose, shape: BoxShape.circle),
+                  child: Text('$badge',
+                      style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white)),
                 ),
               ),
             Column(
@@ -471,17 +600,12 @@ class _NavCard extends StatelessWidget {
                   child: Icon(icon, color: Colors.white, size: 26),
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
-                ),
+                Text(title,
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600, color: Colors.white)),
+                Text(subtitle,
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: Colors.white70)),
               ],
             ),
           ],
